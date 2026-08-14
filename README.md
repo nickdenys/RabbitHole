@@ -1,64 +1,53 @@
 # CodeRabbit Triage
 
-A browser extension that turns CodeRabbit review comments on GitHub pull requests into a triage worklist. CodeRabbit threads are hidden from the timeline and surfaced in a side drawer where you can see all findings at once, sort them by severity or file, resolve them through GitHub's own button, and know exactly what is left.
+Turns a CodeRabbit review on a GitHub pull request into a checklist you work down to zero.
 
-Status: early scaffold. The extension builds, loads unpacked, and detects supported pages. Parsing, hiding and the worklist drawer are in progress (see the roadmap below).
+CodeRabbit's comments come out of the timeline and go into a side drawer, where you can see every finding at once, sort by severity or file, resolve them through GitHub's own button, and tell what is left.
 
-## Why
+**The checklist is the point. Hiding the comments is just how the findings get somewhere you can work them.** Existing tools (CodeRabbit's own Houdini, various userscripts) only do the hiding.
 
-The pain is not visual noise. A CodeRabbit review cannot be worked as a task list. You cannot see all findings at once, sort them, check them off, and know what remains. Hiding the comments is the delivery mechanism, not the goal. Existing hiders (CodeRabbit's own Houdini, various userscripts) solve only the hiding half.
+**Status: early scaffold.** It builds, loads unpacked, and detects supported pages. Parsing, hiding and the drawer are in progress. See the roadmap.
 
 ## The invariants
 
-The dangerous failure mode is not a broken panel. It is a page that silently hides review findings you never see. Three invariants guard against that:
+**The dangerous failure is not a broken panel. It is a page that quietly hides findings you never see.** Three rules prevent that, and they are tested.
 
 1. Never hide a thread that could not be parsed.
-2. Never hide a thread that cannot be positively attributed to CodeRabbit.
-3. The panel must always distinguish "zero findings" from "could not read this page".
+2. Never hide a thread that cannot be positively proven to be CodeRabbit's.
+3. Always distinguish "zero findings" from "could not read this page".
 
-Invariant 3 covers GitHub's ongoing React rewrite of the Conversation page. On an unrecognized build the extension hides nothing and the drawer handle shows an explicit unsupported state instead of an empty list.
+Number 3 exists because GitHub is rewriting the Conversation page in React. On a build the extension does not recognise it hides nothing, and the drawer handle says so rather than showing a reassuring empty list.
 
 ## How it works
 
-Everything runs against the rendered DOM of the Conversation tab. No API token, no backend, no permissions beyond `storage`.
+Everything reads the rendered page. No API token, no backend, no permission beyond `storage`.
 
-* Unresolved threads are fully rendered in the page, so the actual worklist costs zero network requests.
-* Resolved threads are collapsed and expose no author information, so they are fetched lazily (on panel open, concurrency capped) through GitHub's own deferred thread endpoint, using session cookies.
-* Severity, category and effort come from CodeRabbit's emoji prefixed triple, rendered as the first three `em` elements of the comment body. Parsing is positional and requires the emoji prefix, so prose that emphasizes a severity word never matches.
-* Resolve and unresolve click GitHub's own buttons (`form[action$="/resolve"] button`), so done state is GitHub's `data-resolved`, never local bookkeeping.
+* **Unresolved threads are already in the page**, so your actual worklist costs zero network requests.
+* **Resolved threads are collapsed** and show no author, so they are fetched lazily on panel open (concurrency capped) through GitHub's own deferred thread endpoint, using your session cookie. Private repos work without a token.
+* **Severity, category and effort** come from CodeRabbit's emoji prefixed triple, the first three `em` elements of the comment body. Read by position and requires the emoji, so prose that happens to say "Major" never matches.
+* **Resolve and unresolve click GitHub's own buttons.** Done state is GitHub's `data-resolved`, never local bookkeeping.
 
 ### Hide policy
 
-Safe mode is the default: only threads where every comment is authored by CodeRabbit are hidden. A human reply, or a pending comment of your own, keeps the thread in the timeline and badges it in the panel. Aggressive mode (hide all CodeRabbit rooted threads) is an explicit toggle for teams that never discuss findings inline.
+**Safe mode is the default: a thread is hidden only if every comment in it is CodeRabbit's.** One human reply, or one unsubmitted comment of your own, keeps the thread in the timeline and badges it in the panel.
 
-The walkthrough comment and the "Actionable comments posted: N" summaries are also hidden, but the summaries are parsed first: their sum is compared against the number of threads found, and a mismatch shows a warning (the Conversation tab is known to occasionally drop threads). The check only ever warns, it never gates.
+**Aggressive mode hides all CodeRabbit rooted threads.** It is an explicit toggle, for teams that never discuss findings inline.
+
+The walkthrough comment and the "Actionable comments posted: N" summaries are hidden too, but read first: their total is compared against the threads found, and a mismatch warns you. The Conversation tab is known to occasionally drop a thread. The check only warns, it never blocks.
 
 ## Roadmap
 
-### v0.1, the unresolved worklist
+**v0.1 is the unresolved worklist**, which needs no network requests at all.
 
-* Fixture capture script and committed fixtures from public PRs
-* Thread scanner: walk `review-thread-collapsible`, attribute authors, parse the triple, detect Outdated and Pending states
-* Hide engine with the safe rule, plus a MutationObserver so lazily loaded timeline items do not escape it
-* Drawer UI: unresolved findings with severity, category, effort, outdated, pending and human activity badges
+* Fixture capture script, plus committed fixtures from public PRs
+* Thread scanner: walk `review-thread-collapsible`, attribute authors, parse the triple, detect Outdated and Pending
+* Hide engine with the safe rule, plus a MutationObserver so late loading items do not slip past
+* Drawer showing unresolved findings with severity, category, effort, outdated, pending and human activity badges
 * Sort by severity and by file
-* Resolve action, copy "Prompt for AI Agents"
+* Resolve, and copy "Prompt for AI Agents"
 * Turbo navigation handling
 
-### v0.2, the full design
-
-* Deferred fetch of resolved threads (lazy on panel open, concurrency around 6)
-* Unresolve action
-* Count check warning based on CodeRabbit's own summary counts
-* Sort by state, category and effort
-* Aggressive hide toggle and preference persistence via `chrome.storage.local`
-* Care point: fetched thread HTML is GitHub rendered, but it must still be injected carefully (sanitize or render into an inert container) since the panel lives in an extension context
-
-### Later, maybe
-
-* Firefox port (needs a signing pipeline, Firefox has no persistent unpacked mode)
-* Support for GitHub's React build of the Conversation page once the rollout stabilizes
-* Store listing
+Fetching resolved threads, the remaining sort axes and the aggressive hide toggle come after that.
 
 ## Development
 
@@ -68,9 +57,9 @@ npm run dev      # vite build --watch
 npm test         # vitest, happy-dom
 ```
 
-Load the `dist/` folder as an unpacked extension at `chrome://extensions` (enable Developer mode). Rebuilds require a manual extension reload. Chromium browsers only.
+Load the `dist/` folder as an unpacked extension at `chrome://extensions` with Developer mode enabled. Rebuilds need a manual extension reload. Chromium browsers only.
 
-Test fixtures follow a strict policy, see `test/fixtures/README.md`: committed fixtures come from public PRs only, captures from private repositories stay local and gitignored.
+**Fixtures follow a strict rule:** committed fixtures come from public PRs only, captures from private repositories stay local and gitignored. See `test/fixtures/README.md`.
 
 ## License
 
