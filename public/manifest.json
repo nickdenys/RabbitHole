@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "CodeRabbit Triage",
+  "version": "0.1.0",
+  "description": "Turns CodeRabbit review comments into a triage worklist on GitHub pull requests.",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["https://github.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

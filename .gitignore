@@ -1,0 +1,5 @@
+node_modules/
+dist/
+
+# Captures from private PRs never leave this machine.
+test/fixtures/private/
