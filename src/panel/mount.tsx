@@ -11,6 +11,10 @@ let shadowRoot: ShadowRoot | null = null
  * The drawer lives in a shadow root on a host appended to <body>, outside
  * React's tree, so neither GitHub's styles nor its rerenders can touch it.
  */
+export function isPanelMounted(): boolean {
+  return document.getElementById(HOST_ID) !== null
+}
+
 export function updatePanel(kind: PageKind): void {
   if (kind === 'not-pr') {
     unmountPanel()

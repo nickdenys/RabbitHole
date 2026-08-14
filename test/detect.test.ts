@@ -23,13 +23,25 @@ describe('detectPage', () => {
     expect(detectPage(doc('<div class="js-timeline-item"></div>'), `${PR_URL}#issuecomment-1`)).toBe('classic')
   })
 
+  it('accepts a trailing slash, with or without query and hash', () => {
+    expect(detectPage(doc('<div class="js-timeline-item"></div>'), `${PR_URL}/`)).toBe('classic')
+    expect(detectPage(doc('<div class="js-timeline-item"></div>'), `${PR_URL}/?x=1`)).toBe('classic')
+    expect(detectPage(doc('<div class="js-timeline-item"></div>'), `${PR_URL}/#issuecomment-1`)).toBe('classic')
+  })
+
   it('detects the classic Rails timeline', () => {
     expect(detectPage(doc('<div class="js-timeline-item"></div>'), PR_URL)).toBe('classic')
   })
 
-  it('detects the React build as unsupported, even alongside classic markers', () => {
-    const html = '<react-app app-name="pull-requests"></react-app><div class="js-timeline-item"></div>'
-    expect(detectPage(doc(html), PR_URL)).toBe('react')
+  it('detects the React build as unsupported when the timeline is absent', () => {
+    expect(detectPage(doc('<react-app app-name="pull-requests"></react-app>'), PR_URL)).toBe('react')
+  })
+
+  it('treats a timeline inside the React shell as classic', () => {
+    // GitHub wraps the Rails-rendered timeline in the react-app shell too, so
+    // the shell alone must not veto a timeline the parser can read.
+    const html = '<react-app app-name="pull-requests"><div class="js-timeline-item"></div></react-app>'
+    expect(detectPage(doc(html), PR_URL)).toBe('classic')
   })
 
   it('reports unknown when neither build is recognizable', () => {
