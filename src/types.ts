@@ -1,4 +1,15 @@
-export type Severity = 'critical' | 'major' | 'minor'
+/**
+ * CodeRabbit's severity words, worst first, which is also the sort order the
+ * panel reads them in.
+ *
+ * Three of the four are counted facts: across the five fixtures the middle
+ * `em` reads `🟡 Minor` 29 times, `🟠 Major` 10 times and `🔵 Trivial` 8 times.
+ * **`critical` has never appeared in any capture.** It stays because dropping a
+ * word only turns a real finding into an unparsed one, which is the failure
+ * `trivial` was: unknown severity fails the whole triple, taking the category
+ * and the effort with it.
+ */
+export type Severity = 'critical' | 'major' | 'minor' | 'trivial'
 
 export type PageKind = 'not-pr' | 'classic' | 'react' | 'unknown'
 
@@ -68,4 +79,25 @@ export interface Thread {
    */
   authors: ThreadAuthors | null
   problems: ParseProblem[]
+}
+
+/**
+ * Everything the drawer shows about a thread, read off its root comment.
+ *
+ * Only `title` is guaranteed: a row with no label is useless and there is
+ * always body text, so the title falls back rather than failing. Every other
+ * field is null when the page does not carry it, and null here is a gap in the
+ * description, never a reason to hide or to skip a thread.
+ */
+export interface Finding {
+  /** Never empty. The line after the severity triple, or the body text, capped. */
+  title: string
+  /** The three triple fields move together: all three, or all three null. */
+  category: string | null
+  severity: Severity | null
+  effort: string | null
+  /** The text inside CodeRabbit's `Prompt for AI Agents` block, newlines kept. */
+  aiPrompt: string | null
+  /** The root comment's `#discussion_r<id>` fragment. In page, not a full URL. */
+  permalink: string | null
 }

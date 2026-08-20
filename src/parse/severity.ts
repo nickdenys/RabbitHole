@@ -6,10 +6,20 @@ export interface Triple {
   effort: string
 }
 
+/**
+ * Matched on the word alone, lowercased, never on the emoji. The emoji only has
+ * to be there, which is what separates a triple from prose.
+ *
+ * `trivial` was added 20 August 2026, after step A4 measured 8 root comments
+ * across the fixtures stating `🔵 Trivial`. Every one of them had been failing
+ * the whole triple over the one unknown word and losing its category and effort
+ * with it, so the panel called 8 real findings unparsed. See [[Decision log]].
+ */
 const SEVERITIES: Record<string, Severity> = {
   critical: 'critical',
   major: 'major',
   minor: 'minor',
+  trivial: 'trivial',
 }
 
 /**
