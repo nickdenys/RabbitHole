@@ -36,7 +36,7 @@ const PENDING_COMMENT = '.js-pending-review-comment'
  * name is neither positive nor proof. `/coderabbitai` is a different account
  * that anyone can register, and Houdini's bug was matching prose.
  */
-const CODERABBIT_HREF = '/apps/coderabbitai'
+export const CODERABBIT_HREF = '/apps/coderabbitai'
 
 /**
  * Who wrote every comment in a thread, or null when that cannot be answered.
