@@ -33,6 +33,11 @@ describe('detectPage', () => {
     expect(detectPage(doc('<div class="js-timeline-item"></div>'), PR_URL)).toBe('classic')
   })
 
+  // Hand built on purpose. A logged out session no longer serves the React
+  // build, so there is no fixture to assert against; the shell selector below
+  // was verified against a real React page on 11 August 2026. The rule that
+  // actually protects a reader, an unrecognised build hides nothing, belongs to
+  // the engine and does not depend on recognising React specifically.
   it('detects the React build as unsupported when the timeline is absent', () => {
     expect(detectPage(doc('<react-app app-name="pull-requests"></react-app>'), PR_URL)).toBe('react')
   })

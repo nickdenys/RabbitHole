@@ -18,5 +18,19 @@ export default defineConfig({
   },
   test: {
     environment: 'happy-dom',
+    // Fixtures are whole GitHub pages, so they carry <link> tags pointing at
+    // githubassets.com. happy-dom will fetch those for real, which makes the
+    // suite hit the network and fail offline. Nothing here renders, so none of
+    // it is wanted.
+    environmentOptions: {
+      happyDOM: {
+        settings: {
+          disableJavaScriptEvaluation: true,
+          disableJavaScriptFileLoading: true,
+          disableCSSFileLoading: true,
+          disableIframePageLoading: true,
+        },
+      },
+    },
   },
 })
