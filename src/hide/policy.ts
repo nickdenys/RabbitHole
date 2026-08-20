@@ -1,4 +1,4 @@
-import type { ParsedThread } from '../types'
+import type { Thread } from '../types'
 
 export type HideMode = 'safe' | 'aggressive'
 
@@ -12,7 +12,7 @@ export type HideMode = 'safe' | 'aggressive'
  * A human reply, or a pending comment of your own, keeps the thread visible.
  * Aggressive mode (opt-in toggle): hide all CodeRabbit-rooted threads.
  */
-export function shouldHide(_thread: ParsedThread, _mode: HideMode): boolean {
+export function shouldHide(_thread: Thread, _mode: HideMode): boolean {
   // TODO(v0.1): implement. Until then nothing is ever hidden.
   return false
 }
