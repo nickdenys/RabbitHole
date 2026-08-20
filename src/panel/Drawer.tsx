@@ -1,6 +1,8 @@
+import { useState } from 'preact/hooks'
 import type { TriageRow, TriageState } from '../engine'
 import { Row } from './Row'
 import { emptyState, unreadCount, type EmptyState } from './rows'
+import { SORT_LABELS, sortRows, type SortAxis } from './sort'
 
 interface DrawerProps {
   state: TriageState
@@ -14,9 +16,16 @@ interface DrawerProps {
  * neither GitHub's stylesheet nor its rerenders reach it.
  */
 export function Drawer({ state, listed, onClose }: DrawerProps) {
+  // Held here rather than in `App` so it lives exactly as long as the open
+  // drawer does. A pass runs on every mutation and hands down a new `listed`,
+  // and preact keeps this across those renders, so a churning page does not
+  // reshuffle the list under the reader.
+  const [axis, setAxis] = useState<SortAxis>('severity')
+
   const empty = emptyState(state, listed)
   const open = listed.filter((row) => !row.thread.resolved).length
   const unread = unreadCount(state)
+  const sorted = sortRows(listed, axis)
 
   return (
     <aside class="drawer" aria-label="CodeRabbit Triage">
@@ -35,9 +44,11 @@ export function Drawer({ state, listed, onClose }: DrawerProps) {
 
       {empty !== null && <Empty kind={empty} />}
 
-      {listed.length > 0 && (
+      {listed.length > 0 && <SortPicker axis={axis} onChange={setAxis} />}
+
+      {sorted.length > 0 && (
         <ul class="rows">
-          {listed.map((row) => (
+          {sorted.map((row) => (
             <Row row={row} key={rowKey(row)} />
           ))}
         </ul>
@@ -50,6 +61,33 @@ export function Drawer({ state, listed, onClose }: DrawerProps) {
         </p>
       )}
     </aside>
+  )
+}
+
+/**
+ * The axis picker. A select rather than a pair of buttons because B6 adds three
+ * more axes to the same control, and a five item toggle row does not fit a
+ * 380px drawer.
+ */
+function SortPicker({ axis, onChange }: { axis: SortAxis; onChange: (axis: SortAxis) => void }) {
+  return (
+    <div class="sort">
+      <label class="sort-label" for="cr-sort">
+        Sort by
+      </label>
+      <select
+        class="sort-select"
+        id="cr-sort"
+        value={axis}
+        onChange={(event) => onChange((event.currentTarget as HTMLSelectElement).value as SortAxis)}
+      >
+        {(Object.keys(SORT_LABELS) as SortAxis[]).map((option) => (
+          <option value={option} key={option}>
+            {SORT_LABELS[option]}
+          </option>
+        ))}
+      </select>
+    </div>
   )
 }
 

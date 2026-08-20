@@ -123,6 +123,32 @@
   font-weight: 600;
 }
 
+/* The picker sits between the notices and the list, so it reads as a control
+ * over the rows below it rather than part of the header. */
+.sort {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.sort-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sort-select {
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .rows {
   margin: 0;
   padding: 0;
