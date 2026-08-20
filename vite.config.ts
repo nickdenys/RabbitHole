@@ -18,11 +18,15 @@ export default defineConfig({
   },
   test: {
     environment: 'happy-dom',
-    // The largest fixture is 8.7 MB of markup and four test files parse it.
+    // The largest fixture is 8.7 MB of markup and five test files parse it.
     // In a full parallel run the workers contend, and a single case can spend
     // more than vitest's 5 second default just building its document, which
     // fails a test that is not slow so much as sharing a machine.
     testTimeout: 20_000,
+    // Same reason, one hook further out: A9's drawer tests parse a fixture in a
+    // `beforeAll` so the whole file shares one engine pass, and the default
+    // here is 10 seconds rather than the 5 above.
+    hookTimeout: 20_000,
     // Fixtures are whole GitHub pages, so they carry <link> tags pointing at
     // githubassets.com. happy-dom will fetch those for real, which makes the
     // suite hit the network and fail offline. Nothing here renders, so none of

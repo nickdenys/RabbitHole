@@ -1,9 +1,25 @@
 import { detectPage } from './detect'
 import { applyHiding, revealAll } from './hide/apply'
 import { hideVerdict, type HideMode, type HideVerdict } from './hide/policy'
+import { readFinding } from './parse/finding'
 import { scanNotes, type CodeRabbitNote } from './parse/notes'
 import { scanThreads } from './parse/thread'
-import type { PageKind, Thread } from './types'
+import type { Finding, PageKind, Thread } from './types'
+
+/**
+ * One thread, with everything the drawer needs to draw a line about it.
+ *
+ * The verdict travels with the row because a row that stayed in the timeline
+ * has to say why, and the reason is the policy's answer rather than something
+ * the panel can re-derive: the mode that produced it lives here, not there.
+ * `finding` is null exactly when the thread has no body in the page, which is
+ * every collapsed thread until the B2 fetch.
+ */
+export interface TriageRow {
+  thread: Thread
+  finding: Finding | null
+  verdict: HideVerdict
+}
 
 /**
  * Everything one pass learned about the page, and the only thing the panel is
@@ -17,6 +33,13 @@ import type { PageKind, Thread } from './types'
 export interface TriageState {
   kind: PageKind
   threads: Thread[]
+  /**
+   * The same threads, in the same order, carrying their finding and their
+   * verdict. `threads` stays because it is the scan's own output and half the
+   * suite reads it; `rows` is that plus the two things only the panel wants,
+   * holding the same `Thread` objects rather than copies of them.
+   */
+  rows: TriageRow[]
   notes: CodeRabbitNote[]
   hidden: Set<string>
   counts: { total: number; unresolved: number; hidden: number; unparsed: number }
@@ -98,15 +121,22 @@ function runPass(doc: Document): TriageState {
   // reveal matters because Turbo can navigate from a page we did read.
   if (kind !== 'classic') {
     revealAll(doc)
-    return { kind, threads: [], notes: [], hidden: new Set(), counts: NO_COUNTS }
+    return { kind, threads: [], rows: [], notes: [], hidden: new Set(), counts: NO_COUNTS }
   }
 
   const threads = scanThreads(doc)
   const notes = scanNotes(doc)
 
-  const verdicts = new Map<Thread, HideVerdict>(
-    threads.map((thread) => [thread, hideVerdict(thread, MODE)]),
-  )
+  // Read once per pass, not once per render: the panel redraws on its own
+  // state (opening, sorting from A10) and re-reading the page on every one of
+  // those would put the parsers back in the render path.
+  const rows: TriageRow[] = threads.map((thread) => ({
+    thread,
+    finding: readFinding(thread.el),
+    verdict: hideVerdict(thread, MODE),
+  }))
+
+  const verdicts = new Map<Thread, HideVerdict>(rows.map((row) => [row.thread, row.verdict]))
   const hideable = threads.filter((thread) => verdicts.get(thread)?.hide)
 
   applyHiding([...hideable.map((thread) => thread.el), ...notes.map((note) => note.el)], doc)
@@ -114,6 +144,7 @@ function runPass(doc: Document): TriageState {
   return {
     kind,
     threads,
+    rows,
     notes,
     hidden: new Set(hideable.map((thread) => thread.id)),
     counts: {
