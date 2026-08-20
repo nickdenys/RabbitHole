@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detectPage } from '../src/detect'
+import { detectPage, pullRequestKey } from '../src/detect'
 
 function doc(html: string): Document {
   const d = document.implementation.createHTMLDocument()
@@ -51,5 +51,43 @@ describe('detectPage', () => {
 
   it('reports unknown when neither build is recognizable', () => {
     expect(detectPage(doc('<div></div>'), PR_URL)).toBe('unknown')
+  })
+})
+
+/**
+ * The engine's "am I still on the same page" question, which is not the
+ * detector's "can I read this page" question. Every case here is a pair the two
+ * answer differently, because that difference is the whole reason the second
+ * function exists.
+ */
+describe('pullRequestKey', () => {
+  it('is the pull request itself, with no tab in it', () => {
+    expect(pullRequestKey(PR_URL)).toBe('owner/repo/pull/590')
+  })
+
+  it('is the same key on a tab the extension cannot read', () => {
+    // `detectPage` calls these three `not-pr`. Treating them as a navigation
+    // would clear the session on every trip to Files changed and back.
+    for (const url of [`${PR_URL}/files`, `${PR_URL}/commits`, `${PR_URL}/checks`]) {
+      expect(pullRequestKey(url)).toBe('owner/repo/pull/590')
+    }
+  })
+
+  it('survives a trailing slash, a query and a hash', () => {
+    for (const url of [`${PR_URL}/`, `${PR_URL}?x=1`, `${PR_URL}#issuecomment-1`]) {
+      expect(pullRequestKey(url)).toBe('owner/repo/pull/590')
+    }
+  })
+
+  it('is null anywhere that is not a pull request', () => {
+    expect(pullRequestKey('https://github.com/owner/repo')).toBeNull()
+    expect(pullRequestKey('https://github.com/owner/repo/issues/590')).toBeNull()
+    expect(pullRequestKey('https://github.com/owner/repo/pulls')).toBeNull()
+    expect(pullRequestKey('https://example.com/owner/repo/pull/590')).toBeNull()
+  })
+
+  it('separates two pull requests, in one repository or across two', () => {
+    expect(pullRequestKey(PR_URL)).not.toBe(pullRequestKey('https://github.com/owner/repo/pull/591'))
+    expect(pullRequestKey(PR_URL)).not.toBe(pullRequestKey('https://github.com/other/repo/pull/590'))
   })
 })

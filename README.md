@@ -6,7 +6,9 @@ CodeRabbit's comments come out of the timeline and go into a side drawer, where 
 
 **The checklist is the point. Hiding the comments is just how the findings get somewhere you can work them.** Existing tools (CodeRabbit's own Houdini, various userscripts) only do the hiding.
 
-**Status: it hides, it lists, it sorts and you can work it down.** It builds, loads unpacked, reads every CodeRabbit thread on a supported pull request page, takes the ones it can prove are CodeRabbit's out of the timeline, and puts them in a drawer as a row each: severity, title, file, badges, and the reason for anything it deliberately left on the page. The list sorts by severity or by file. Every row can show itself in the timeline, copy CodeRabbit's agent prompt, and resolve through GitHub's own button. Turbo navigation is next. See the roadmap.
+**Status: v0.1 works.** It builds, loads unpacked, reads every CodeRabbit thread on a supported pull request page, takes the ones it can prove are CodeRabbit's out of the timeline, and puts them in a drawer as a row each: severity, title, file, badges, and the reason for anything it deliberately left on the page. The list sorts by severity or by file. Every row can show itself in the timeline, copy CodeRabbit's agent prompt, and resolve through GitHub's own button.
+
+It survives the way GitHub actually moves. Clicking between the tabs of one pull request keeps your progress, arriving at a different pull request is a reset rather than a merge, and leaving pull requests puts every comment back and takes the panel away. Resolved threads are counted rather than listed, because GitHub does not render their comments and fetching them is v0.2's first job. See the roadmap.
 
 ## The invariants
 
@@ -23,9 +25,9 @@ Number 3 exists because GitHub is rewriting the Conversation page in React. On a
 Everything reads the rendered page. No API token, no backend, no permission beyond `storage`.
 
 * **Unresolved threads are already in the page**, so your actual worklist costs zero network requests.
-* **Resolved threads are collapsed** and show no author, so they are fetched lazily on panel open (concurrency capped) through GitHub's own deferred thread endpoint, using your session cookie. Private repos work without a token.
+* **Resolved threads are collapsed** and show no author, so they are fetched lazily on panel open (concurrency capped) through GitHub's own deferred thread endpoint, using your session cookie. Private repos work without a token. (v0.2: today they are counted, not listed.)
 * **Severity, category and effort** come from CodeRabbit's emoji prefixed triple, the first three `em` elements of the comment body. Read by position and requires the emoji, so prose that happens to say "Major" never matches.
-* **Resolve and unresolve click GitHub's own buttons.** Done state is GitHub's `data-resolved`, never local bookkeeping. A click only means the click happened: the row waits for a pass to confirm it on the page, and says so rather than striking a finding through on hope. GitHub renders the button for write access, not for a session, so a row on a repository you cannot write to says that instead.
+* **Resolve and unresolve click GitHub's own buttons** (unresolve in v0.2). Done state is GitHub's `data-resolved`, never local bookkeeping. A click only means the click happened: the row waits for a pass to confirm it on the page, and says so rather than striking a finding through on hope. GitHub renders the button for write access, not for a session, so a row on a repository you cannot write to says that instead.
 
 ### Hide policy
 
@@ -37,7 +39,7 @@ The walkthrough comment and the "Actionable comments posted: N" summaries are hi
 
 ## Roadmap
 
-**v0.1 is the unresolved worklist**, which needs no network requests at all.
+**v0.1 is the unresolved worklist**, which needs no network requests at all. It is done.
 
 * Fixture capture script, plus committed fixtures from public PRs
 * Thread scanner: walk `review-thread-collapsible`, attribute authors, parse the triple, detect Outdated and Pending
@@ -47,7 +49,13 @@ The walkthrough comment and the "Actionable comments posted: N" summaries are hi
 * Resolve, and copy "Prompt for AI Agents"
 * Turbo navigation handling
 
-Fetching resolved threads, the remaining sort axes and the aggressive hide toggle come after that.
+**v0.2 adds the network half**, which is everything that needs GitHub's deferred thread endpoint or a stored preference.
+
+* Fetch resolved threads on panel open, so they list as findings rather than as a count
+* Unresolve, through GitHub's own button
+* The count check: compare CodeRabbit's own "Actionable comments posted: N" against the threads found, and warn on a mismatch
+* Sort by state, category and effort, with grouped headers where a flat list would read as noise
+* The aggressive hide toggle, and the preferences that hold it
 
 ## Development
 

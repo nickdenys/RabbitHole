@@ -1,6 +1,7 @@
-import { detectPage } from './detect'
+import { detectPage, pullRequestKey } from './detect'
 import { applyHiding, revealAll } from './hide/apply'
 import { hideVerdict, type HideMode, type HideVerdict } from './hide/policy'
+import { forgetSessionFindings } from './panel/actions'
 import { readFinding } from './parse/finding'
 import { scanNotes, type CodeRabbitNote } from './parse/notes'
 import { scanThreads } from './parse/thread'
@@ -65,6 +66,12 @@ const OUR_IDS = new Set(['coderabbit-triage-root', 'coderabbit-triage-style'])
  * This is the only place the modules are composed. Everything upstream is pure
  * or reads the page; `hide/apply.ts` is the only thing that writes to it.
  *
+ * **One engine outlives every navigation.** GitHub moves with Turbo, so the
+ * content script is injected once and the page changes underneath it: a pass
+ * therefore has to ask where it is, not assume it is where the last one was.
+ * Arriving at a different pull request is a reset and never a merge, and
+ * leaving pull requests altogether is the same reset with nothing after it.
+ *
  * The returned function is a full teardown: the observer stops, the listener
  * goes, a pending pass is cancelled, and the page is restored to the state it
  * would have been in without the extension.
@@ -72,8 +79,26 @@ const OUR_IDS = new Set(['coderabbit-triage-root', 'coderabbit-triage-style'])
 export function startEngine(doc: Document, onState: (state: TriageState) => void): () => void {
   let scheduled: ReturnType<typeof setTimeout> | undefined
 
+  /**
+   * The pull request the last pass read, `null` for a page that is not one, and
+   * `undefined` before the first pass has run. The third value is not the same
+   * as the second: starting on a page is not arriving at it, and there is
+   * nothing of ours to throw away yet.
+   */
+  let page: string | null | undefined
+
   function pass(): void {
-    onState(runPass(doc))
+    const url = pageUrl(doc)
+    const current = pullRequestKey(url)
+
+    // Order matters. The reset has to happen before the scan, so the pass that
+    // reads the new page is also the pass that publishes it: reset afterwards
+    // and the panel would draw the old pull request's findings for one frame,
+    // over a page they are not on.
+    if (page !== undefined && current !== page) forgetPage(doc)
+    page = current
+
+    onState(runPass(doc, url))
   }
 
   function schedule(records: MutationRecord[]): void {
@@ -100,8 +125,31 @@ export function startEngine(doc: Document, onState: (state: TriageState) => void
     observer.disconnect()
     doc.removeEventListener('turbo:load', pass)
     clearTimeout(scheduled)
-    revealAll(doc)
+    forgetPage(doc)
   }
+}
+
+/**
+ * Drop everything the extension is holding about the page it was on.
+ *
+ * Two things outlive a pass, and both are per page rather than per session:
+ * `hide/apply` holds the reveal set and the last applied targets, and `actions`
+ * holds the findings of threads resolved here. Carried into a different pull
+ * request they are not stale so much as wrong: the session cache would put
+ * another pull request's finding in this one's checklist, which is a data
+ * correctness bug rather than a cosmetic one.
+ *
+ * A full recompute means the threads themselves need no clearing; only the
+ * state deliberately kept between passes does. Nothing else is remembered, so
+ * this is the whole of it.
+ *
+ * The panel is not unmounted here. It is drawn from the published state and
+ * takes itself down when that state says `not-pr`, so a teardown that reached
+ * into it would be a second, disagreeing path to the same thing.
+ */
+function forgetPage(doc: Document): void {
+  revealAll(doc)
+  forgetSessionFindings()
 }
 
 /**
@@ -112,8 +160,8 @@ export function startEngine(doc: Document, onState: (state: TriageState) => void
  * Rescanning costs a few milliseconds on the largest fixture, which is less
  * than the bug of hiding a thread that is no longer there.
  */
-function runPass(doc: Document): TriageState {
-  const kind = detectPage(doc, pageUrl(doc))
+function runPass(doc: Document, url: string): TriageState {
+  const kind = detectPage(doc, url)
 
   // Invariant 3 in code. An unrecognised build is not an empty page, and the
   // difference is the whole reason this returns `kind` rather than a boolean:

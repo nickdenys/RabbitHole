@@ -34,10 +34,11 @@ const RESOLVE_BUTTON = 'form[action$="/resolve"] button'
  * pass. B2's deferred fetch reads the real comments back and this becomes
  * redundant.
  *
- * In memory only, and per page rather than per session in spirit: nothing
- * clears it on a Turbo navigation yet, which is safe because a thread id is a
- * GitHub comment id and does not repeat across pull requests. A12 owns
- * navigation and can call `forgetSessionFindings` if that ever stops holding.
+ * In memory only, and per pull request rather than per session: the engine
+ * clears it on arriving at a different one, and on leaving pull requests
+ * altogether. Moving between the tabs of one pull request is not a navigation
+ * and does not clear it, so a round trip through Files changed keeps the rows
+ * the reader has already worked.
  */
 const sessionFindings = new Map<string, Finding>()
 
@@ -46,7 +47,10 @@ export function sessionFinding(id: string): Finding | undefined {
   return sessionFindings.get(id)
 }
 
-/** Teardown, and the reset a test needs between cases. */
+/**
+ * Teardown, called by the engine when the page it was reading is gone, and the
+ * reset a test needs between cases.
+ */
 export function forgetSessionFindings(): void {
   sessionFindings.clear()
 }

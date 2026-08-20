@@ -1,5 +1,11 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { startEngine, type TriageState } from '../src/engine'
+import {
+  forgetSessionFindings,
+  resolveThread,
+  revealThread,
+  sessionFinding,
+} from '../src/panel/actions'
 import { fixtureNames, loadFixture } from './support/fixture'
 
 const HIDDEN = '.crt-hidden'
@@ -7,6 +13,8 @@ const STYLE_ID = 'coderabbit-triage-style'
 const PANEL_HOST_ID = 'coderabbit-triage-root'
 
 const PR_URL = 'https://github.com/owner/repo/pull/1'
+const OTHER_PR = 'https://github.com/owner/repo/pull/2'
+const SAME_PR_FILES_TAB = 'https://github.com/owner/repo/pull/1/files'
 const NOT_A_PR = 'https://github.com/owner/repo'
 
 /**
@@ -36,6 +44,12 @@ afterEach(() => {
   while (teardowns.length > 0) teardowns.pop()?.()
   vi.useRealTimers()
   setUrl(PR_URL)
+
+  // The teardown above already does this on the engine's own path. Repeating it
+  // here means a case that never started an engine, or one whose reset is the
+  // thing under test and therefore not to be trusted, still leaves the module
+  // level cache empty for the next case.
+  forgetSessionFindings()
 })
 
 /** Start an engine that is torn down after the test, collecting every state. */
@@ -330,6 +344,17 @@ describe('teardown', () => {
     expect(states.length).toBe(1)
   })
 
+  it('forgets the session findings', () => {
+    const d = doc(resolvableMarkup(1))
+    const states = engineOn(d)
+    const row = latest(states).rows[0]
+
+    expect(resolveThread(row)).toBe(true)
+    teardowns.pop()?.()
+
+    expect(sessionFinding(row.thread.id)).toBeUndefined()
+  })
+
   it('cancels a pass that was already scheduled', async () => {
     const d = doc(PAGE)
     const states = engineOn(d)
@@ -340,5 +365,141 @@ describe('teardown', () => {
 
     expect(states.length).toBe(1)
     expect(d.querySelectorAll(HIDDEN).length).toBe(0)
+  })
+})
+
+/**
+ * The same thread, plus the resolve form GitHub renders for a reader who can
+ * write to the repository. `type="button"` because the form is real markup in a
+ * real document here and a submit would try to navigate the test window; the
+ * action under test is the click reaching `resolveThread`, not what GitHub's
+ * own handler would do with it.
+ */
+function resolvableMarkup(id: number): string {
+  return threadMarkup(id).replace(
+    '<div class="review-comment">',
+    '<form action="/owner/repo/pull/1/threads/1/resolve" method="post">' +
+      '<button type="button">Resolve conversation</button></form>' +
+      '<div class="review-comment">',
+  )
+}
+
+/**
+ * Turbo, which is how GitHub moves and therefore the only navigation the
+ * extension ever sees: the content script is never reinjected, so the engine
+ * has to notice on its own that the page changed under it.
+ */
+function navigateTo(url: string, doc: Document): void {
+  setUrl(url)
+  doc.dispatchEvent(new Event('turbo:load'))
+}
+
+describe('navigation', () => {
+  /**
+   * Resolve one thread through the engine's own row, which is the only way the
+   * session cache is ever filled. Returns the id it was filed under.
+   */
+  function resolveFirst(states: TriageState[]): string {
+    const row = latest(states).rows[0]
+
+    expect(resolveThread(row)).toBe(true)
+    expect(sessionFinding(row.thread.id)).toBeDefined()
+
+    return row.thread.id
+  }
+
+  it('keeps the session findings when only the tab changes', () => {
+    const d = doc(resolvableMarkup(1))
+    const id = resolveFirst(engineOn(d))
+
+    navigateTo(SAME_PR_FILES_TAB, d)
+    navigateTo(PR_URL, d)
+
+    // The Files tab is unreadable and the round trip publishes two states that
+    // list nothing, but it is the same pull request throughout. Clearing here
+    // would drop the row the reader had just worked, for the price of clicking
+    // a tab.
+    expect(sessionFinding(id)).toBeDefined()
+  })
+
+  it('forgets the session findings on arriving at a different pull request', () => {
+    const d = doc(resolvableMarkup(1))
+    const id = resolveFirst(engineOn(d))
+
+    navigateTo(OTHER_PR, d)
+
+    expect(sessionFinding(id)).toBeUndefined()
+  })
+
+  it('forgets them on leaving pull requests altogether', () => {
+    const d = doc(resolvableMarkup(1))
+    const id = resolveFirst(engineOn(d))
+
+    navigateTo(NOT_A_PR, d)
+
+    expect(sessionFinding(id)).toBeUndefined()
+  })
+
+  it('re-hides a thread revealed on the pull request it left', () => {
+    const d = doc(PAGE)
+    const states = engineOn(d)
+    const row = latest(states).rows[0]
+
+    revealThread(row)
+    expect(isHidden(row.thread.el)).toBe(false)
+
+    // The document is deliberately not swapped, which is the harder case: a
+    // reveal held by element identity would survive here and only a real reset
+    // takes it away.
+    navigateTo(OTHER_PR, d)
+
+    expect(isHidden(row.thread.el)).toBe(true)
+  })
+
+  it('lists the new pull request and nothing of the last one', () => {
+    const d = doc(PAGE)
+    const states = engineOn(d)
+    expect(latest(states).counts.total).toBe(3)
+
+    d.body.innerHTML = threadMarkup(4001)
+    navigateTo(OTHER_PR, d)
+
+    const state = latest(states)
+    expect(state.counts.total).toBe(1)
+    expect(state.threads.map((thread) => thread.id)).toEqual(['4001'])
+    expect(state.hidden).toEqual(new Set(['4001']))
+  })
+
+  it('publishes exactly one state per navigation, without waiting for a pass', () => {
+    const d = doc(PAGE)
+    const states = engineOn(d)
+
+    navigateTo(OTHER_PR, d)
+
+    expect(states.length).toBe(2)
+    expect(latest(states).kind).toBe('classic')
+  })
+
+  it('does not reset when nothing about the page changed', () => {
+    // A turbo:load on the page it is already on is a rerender, not a
+    // navigation, and a reset there would silently drop the session cache on
+    // whatever GitHub happened to redraw.
+    const d = doc(resolvableMarkup(1))
+    const id = resolveFirst(engineOn(d))
+
+    navigateTo(PR_URL, d)
+
+    expect(sessionFinding(id)).toBeDefined()
+  })
+
+  it('does not reset on the first pass', () => {
+    // Starting on a page is not arriving at one. Nothing of ours exists yet, so
+    // there is nothing to forget, and a reset here would only be a reveal of a
+    // page nobody has hidden.
+    const d = doc(PAGE)
+    const states = engineOn(d)
+
+    expect(latest(states).counts.hidden).toBe(3)
+    expect(d.querySelectorAll(HIDDEN).length).toBeGreaterThan(0)
   })
 })
