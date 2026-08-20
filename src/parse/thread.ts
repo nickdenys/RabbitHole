@@ -1,4 +1,5 @@
 import type { ParseProblem, Thread } from '../types'
+import { REVIEW_COMMENT, readAuthors } from './authors'
 
 const THREAD = 'review-thread-collapsible'
 const TIMELINE_ITEM = '.js-timeline-item'
@@ -25,8 +26,7 @@ const FRAME_ID = /^review-thread-or-comment-id-(\d+)$/
  * Every review thread in the page, in document order, with what can be read off
  * it without fetching anything: which thread it is, which file, what state.
  *
- * Authors, bodies and the severity triple are not read here. Nothing is hidden
- * off this alone, because attribution (invariant 2) is a separate pass.
+ * Attribution runs here too, in `authors.ts`. The severity triple does not.
  *
  * Collapsed threads are included. They carry an id, a file and their state, and
  * excluding them would make the panel silently under-report the review.
@@ -45,6 +45,23 @@ function readThread(el: Element): Thread {
   if (file === null) problems.push('no-file')
 
   const deferredUrl = el.getAttribute('data-deferred-content-url')
+  // Derived from what is present, not from `resolved`: they are two separate
+  // facts, and GitHub can render an expanded thread that is also resolved.
+  const collapsed = deferredUrl !== null && el.querySelector(COMMENT_BODY) === null
+
+  // No exception for collapsed threads, even though every one of them lands
+  // here. They really are threads whose authors nobody has read, the flag on
+  // the row says why and what would fix it, and carving them out would mean
+  // writing "hidden unless collapsed" into the hide policy instead, where it is
+  // one edit away from being lost.
+  const authors = readAuthors(el)
+  if (authors === null) problems.push('unknown-author')
+
+  // A thread that is not collapsed has its comments in the page, so finding
+  // none means the markup moved rather than that the thread is empty. Guarded
+  // on `collapsed` so it never fires on the 97 threads that are simply waiting
+  // to be fetched. Not observed in any fixture.
+  if (!collapsed && el.querySelector(REVIEW_COMMENT) === null) problems.push('no-body')
 
   return {
     el,
@@ -55,10 +72,9 @@ function readThread(el: Element): Thread {
     // towards showing the thread rather than hiding it.
     resolved: el.getAttribute('data-resolved') === 'true',
     outdated: isOutdated(el),
-    // Derived from what is present, not from `resolved`: they are two separate
-    // facts, and GitHub can render an expanded thread that is also resolved.
-    collapsed: deferredUrl !== null && el.querySelector(COMMENT_BODY) === null,
+    collapsed,
     deferredUrl,
+    authors,
     problems,
   }
 }

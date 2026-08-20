@@ -33,6 +33,15 @@ function doc(html: string): Document {
   return d
 }
 
+/**
+ * One attributable comment, so a hand built thread carries no attribution
+ * problem of its own and a case about identity or state stays about that.
+ */
+const COMMENT = `<div class="review-comment">
+  <a class="author" href="/apps/coderabbitai">coderabbitai</a>
+  <div class="comment-body"><p>text</p></div>
+</div>`
+
 const THREAD = (attrs: string, inner = '') => `
   <div class="js-timeline-item">
     <turbo-frame id="review-thread-or-comment-id-111">
@@ -168,7 +177,8 @@ describe('scanThreads, file paths', () => {
   })
 
   it('reports no-file as a gap, keeping the thread and its id', () => {
-    const d = doc(THREAD('data-resolved="false"'))
+    const d = doc(THREAD('data-resolved="false"', COMMENT))
+    // The header link is the first anchor in the thread, ahead of the comment.
     d.querySelector('a')!.remove()
 
     const [thread] = scanThreads(d)
@@ -233,11 +243,13 @@ describe('scanThreads, safety', () => {
   })
 
   it('reads a PR with no CodeRabbit exactly as cleanly', () => {
-    // The scanner knows nothing about authors yet, so a human-only PR must come
-    // back complete rather than empty.
+    // A human-only PR must come back complete rather than empty. Its two
+    // expanded threads read without a single problem; the third is collapsed,
+    // so nobody can say who wrote it and it says so. Attribution itself is
+    // covered in authors.test.ts.
     const scan = scans['no-coderabbit']
 
     expect(scan).toHaveLength(3)
-    expect(scan.every((t) => t.problems.length === 0)).toBe(true)
+    expect(scan.map((t) => t.problems)).toEqual([[], [], ['unknown-author']])
   })
 })

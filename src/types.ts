@@ -20,6 +20,28 @@ export type PageKind = 'not-pr' | 'classic' | 'react' | 'unknown'
  */
 export type ParseProblem = 'no-id' | 'no-file' | 'unknown-author' | 'no-body' | 'no-triple'
 
+/**
+ * Who wrote a thread, counted rather than summarised, so the panel can badge
+ * what it found and the hide policy can make its own decision from the numbers.
+ *
+ * `fromCodeRabbit` counts only comments positively proven to be CodeRabbit's,
+ * so `fromCodeRabbit + fromHumans === comments` always holds and anything not
+ * proven lands on the human side. A pending comment is counted as human.
+ */
+export interface ThreadAuthors {
+  comments: number
+  /** Comments whose author link is exactly CodeRabbit's account path. */
+  fromCodeRabbit: number
+  /** Everything else, pending comments included. */
+  fromHumans: number
+  /** Unsubmitted comments of your own. Always part of `fromHumans`. */
+  pending: number
+  /** Safe mode hides a thread only when this is true. */
+  allFromCodeRabbit: boolean
+  /** Aggressive mode hides a thread when this is true. */
+  rootIsCodeRabbit: boolean
+}
+
 export interface Thread {
   /** The `review-thread-collapsible` element itself. */
   el: Element
@@ -39,5 +61,11 @@ export interface Thread {
   /** Body absent and only fetchable, which is the v0.2 deferred fetch. */
   collapsed: boolean
   deferredUrl: string | null
+  /**
+   * Null whenever attribution failed, which includes every collapsed thread.
+   * Null always comes with the blocking 'unknown-author' problem, and a thread
+   * carrying it is never hidden (invariant 2).
+   */
+  authors: ThreadAuthors | null
   problems: ParseProblem[]
 }
