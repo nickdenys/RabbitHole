@@ -198,6 +198,43 @@
   font-style: italic;
 }
 
+/* The actions sit under the description rather than beside it, because a 380px
+ * drawer has no horizontal room left once the file path has had its share. */
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.action {
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.action:hover:not(:disabled) {
+  background: var(--badge-bg);
+}
+
+.action:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+/* Never green, never a tick. This line reports what a click did, and the done
+ * state is the Resolved badge and the strikethrough, which come off the page. */
+.row-status {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .row-badges {
   display: flex;
   flex-wrap: wrap;

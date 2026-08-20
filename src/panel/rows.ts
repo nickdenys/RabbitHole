@@ -1,4 +1,5 @@
 import type { TriageRow, TriageState } from '../engine'
+import { sessionFinding } from './actions'
 
 /**
  * What the drawer shows instead of a list, and why. Invariant 3 as a user sees
@@ -26,16 +27,37 @@ export type EmptyState = 'unsupported' | 'no-findings' | 'all-done'
  *   then the drawer says how many it is not showing rather than listing 97
  *   rows that all read "unreadable".
  *
+ * **A thread resolved in this session is the exception to the second one.** It
+ * collapses the moment GitHub accepts the click, and dropping it would make the
+ * checklist erase the line the reader just finished. Its description is still
+ * held from before the resolve, so the row is listed and drawn from that; see
+ * `sessionFinding`.
+ *
  * Everything else is listed, hidden or not, which is the point: a row is the
  * only place a hidden finding still exists.
  */
 export function listedRows(state: TriageState): TriageRow[] {
-  return state.rows.filter(isListed)
+  return state.rows.filter(isListed).map(described)
 }
 
 function isListed(row: TriageRow): boolean {
   if (row.verdict.hide) return true
-  return row.verdict.reason !== 'not-coderabbit' && row.verdict.reason !== 'collapsed'
+  return row.verdict.reason !== 'not-coderabbit' && !isUnread(row)
+}
+
+/**
+ * The row as the drawer should draw it, which for a thread resolved in this
+ * session is the description parsed before it collapsed.
+ *
+ * The thread itself is always the fresh one, so `resolved`, `outdated` and the
+ * file stay whatever the page says now. Only the finding, which the page no
+ * longer carries at all, comes out of the cache.
+ */
+function described(row: TriageRow): TriageRow {
+  if (row.finding !== null) return row
+
+  const remembered = sessionFinding(row.thread.id)
+  return remembered === undefined ? row : { ...row, finding: remembered }
 }
 
 /**
@@ -43,7 +65,17 @@ function isListed(row: TriageRow): boolean {
  * Counted so the drawer can admit to them; see `listedRows`.
  */
 export function unreadCount(state: TriageState): number {
-  return state.rows.filter((row) => !row.verdict.hide && row.verdict.reason === 'collapsed').length
+  return state.rows.filter(isUnread).length
+}
+
+/**
+ * Collapsed, and with nothing held about it from earlier in the session. The
+ * one predicate behind both the list and the count, so a thread can never be
+ * both drawn and reported as one the drawer is not showing.
+ */
+function isUnread(row: TriageRow): boolean {
+  if (row.verdict.hide || row.verdict.reason !== 'collapsed') return false
+  return sessionFinding(row.thread.id) === undefined
 }
 
 /** Null when there is a list to draw. */

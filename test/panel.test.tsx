@@ -1,7 +1,8 @@
 import { render } from 'preact'
-import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { startEngine, type TriageRow, type TriageState } from '../src/engine'
 import type { HideVerdict } from '../src/hide/policy'
+import { forgetSessionFindings } from '../src/panel/actions'
 import { App } from '../src/panel/App'
 import { badges, emptyState, keptReason, listedRows, unreadCount } from '../src/panel/rows'
 import type { Finding, Thread, ThreadAuthors } from '../src/types'
@@ -14,6 +15,22 @@ beforeAll(() => {
 })
 
 /**
+ * A real element per row, because the actions reach into the page through it.
+ * The resolve form is opt in: GitHub renders it only for a reader who can write
+ * to the repository, so its absence is the common case.
+ */
+function threadEl(resolvable: boolean): Element {
+  const el = document.createElement('review-thread-collapsible')
+  if (resolvable) {
+    el.innerHTML =
+      '<form action="/owner/repo/pull/1/threads/1/resolve" method="post">' +
+      '<button type="submit">Resolve conversation</button></form>'
+    el.querySelector('form')?.addEventListener('submit', (event) => event.preventDefault())
+  }
+  return el
+}
+
+/**
  * A row built by hand. The defaults describe the case the drawer exists for: a
  * readable, unresolved, fully CodeRabbit finding that was hidden, so every case
  * below is that row with one thing changed.
@@ -23,6 +40,8 @@ function row(over: {
   authors?: Partial<ThreadAuthors> | null
   finding?: Partial<Finding> | null
   verdict?: HideVerdict
+  /** Give the thread GitHub's resolve form, which most readers never see. */
+  resolvable?: boolean
 } = {}): TriageRow {
   const authors: ThreadAuthors | null =
     over.authors === null
@@ -39,7 +58,7 @@ function row(over: {
 
   return {
     thread: {
-      el: null as unknown as Element,
+      el: threadEl(over.resolvable === true),
       timelineItem: null,
       id: '1',
       file: 'src/app.ts',
@@ -102,6 +121,9 @@ afterEach(() => {
       host.remove()
     }
   }
+  // Resolving in one case must not leave a row listed in the next.
+  forgetSessionFindings()
+  vi.restoreAllMocks()
 })
 
 function mount(state: TriageState): HTMLElement {
@@ -307,6 +329,136 @@ describe('the panel', () => {
     expect(host.querySelector('.row-title')?.textContent).toBe('<img src=x onerror=boom> and <b>bold</b>')
     expect(host.querySelectorAll('img')).toHaveLength(0)
     expect(host.querySelectorAll('b')).toHaveLength(0)
+  })
+})
+
+describe('the actions on a row', () => {
+  /** Open the drawer and hand back the one row in it. */
+  async function open(state: TriageState): Promise<HTMLElement> {
+    const host = mount(state)
+    await click(host, '.handle')
+    return host
+  }
+
+  const status = (host: HTMLElement) => host.querySelector('.row-status')?.textContent ?? null
+
+  it('offers show, copy and resolve on an open finding', async () => {
+    const host = await open(stateOf([row({ resolvable: true })]))
+
+    expect([...host.querySelectorAll('.action')].map((b) => b.textContent)).toEqual([
+      'Show in timeline',
+      'Copy prompt',
+      'Resolve',
+    ])
+    expect(status(host)).toBeNull()
+  })
+
+  it('drops the resolve button once GitHub calls the thread resolved', async () => {
+    const host = await open(stateOf([row({ thread: { resolved: true }, resolvable: true })]))
+
+    expect(host.querySelector('.action.resolve')).toBeNull()
+    expect(host.querySelector('.action.copy')).not.toBeNull()
+  })
+
+  // GitHub renders the button for write access rather than for a session, so a
+  // reader on a stranger's pull request meets this on every thread.
+  it('says so when GitHub rendered no resolve button, and claims nothing', async () => {
+    const host = await open(stateOf([row()]))
+
+    await click(host, '.action.resolve')
+
+    expect(status(host)).toContain('needs write access')
+    expect(host.querySelector('.row')?.classList.contains('done')).toBe(false)
+    expect(badges(row())).not.toContain('Resolved')
+  })
+
+  /**
+   * The rule this step turns on: a click is not a done state. The row waits for
+   * a pass to read `data-resolved` off the page, and until one does it says it
+   * is waiting rather than striking the finding through.
+   */
+  it('waits for the engine rather than calling itself done', async () => {
+    const state = stateOf([row({ resolvable: true })])
+    const host = await open(state)
+
+    await click(host, '.action.resolve')
+
+    expect(status(host)).toContain('Resolving')
+    expect(host.querySelector<HTMLButtonElement>('.action.resolve')?.disabled).toBe(true)
+    expect(host.querySelector('.row')?.classList.contains('done')).toBe(false)
+  })
+
+  it('finishes when a pass reports the thread resolved', async () => {
+    const before = row({ resolvable: true })
+    const host = await open(stateOf([before]))
+    await click(host, '.action.resolve')
+
+    // What the next pass publishes: the same thread, read again off the page.
+    render(
+      <App state={stateOf([{ ...before, thread: { ...before.thread, resolved: true } }])} />,
+      host,
+    )
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(status(host)).toBeNull()
+    expect(host.querySelector('.row')?.classList.contains('done')).toBe(true)
+  })
+
+  it('offers the click again when nothing confirms it, rather than lying', async () => {
+    vi.useFakeTimers()
+    try {
+      const host = mount(stateOf([row({ resolvable: true })]))
+      host.querySelector<HTMLElement>('.handle')?.click()
+      await vi.advanceTimersByTimeAsync(0)
+
+      host.querySelector<HTMLElement>('.action.resolve')?.click()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(status(host)).toContain('Resolving')
+
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      expect(status(host)).toContain('did not confirm')
+      expect(host.querySelector('.action.resolve')?.textContent).toBe('Resolve again')
+      expect(host.querySelector<HTMLButtonElement>('.action.resolve')?.disabled).toBe(false)
+      expect(host.querySelector('.row')?.classList.contains('done')).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('copies the agent prompt and says it did', async () => {
+    const write = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined)
+    const host = await open(stateOf([row({ finding: { aiPrompt: 'guard the null case' } })]))
+
+    await click(host, '.action.copy')
+
+    expect(write).toHaveBeenCalledWith('guard the null case')
+    expect(status(host)).toBe('Prompt copied.')
+  })
+
+  it('reports a comment with no prompt, and a clipboard that refused, differently', async () => {
+    const noPrompt = await open(stateOf([row()]))
+    await click(noPrompt, '.action.copy')
+    expect(status(noPrompt)).toContain('no agent prompt')
+
+    vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('not allowed'))
+    const refused = await open(stateOf([row({ finding: { aiPrompt: 'guard it' } })]))
+    await click(refused, '.action.copy')
+    expect(status(refused)).toContain('clipboard refused')
+  })
+
+  it('shows the finding on the page and reveals it if it was hidden', async () => {
+    const listed = row({ resolvable: true })
+    document.body.append(listed.thread.el)
+    listed.thread.el.classList.add('crt-hidden')
+    const scroll = vi.spyOn(listed.thread.el, 'scrollIntoView')
+
+    const host = await open(stateOf([listed]))
+    await click(host, '.action.reveal')
+
+    expect(listed.thread.el.classList.contains('crt-hidden')).toBe(false)
+    expect(scroll).toHaveBeenCalled()
+    listed.thread.el.remove()
   })
 })
 
