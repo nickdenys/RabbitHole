@@ -1,11 +1,11 @@
-import type { PageKind } from '../types'
+import type { TriageState } from '../engine'
 
 interface AppProps {
-  kind: PageKind
+  state: TriageState
 }
 
-export function App({ kind }: AppProps) {
-  if (kind === 'react' || kind === 'unknown') {
+export function App({ state }: AppProps) {
+  if (state.kind === 'react' || state.kind === 'unknown') {
     return (
       <div class="handle warn" title="CodeRabbit Triage: this GitHub build isn't supported yet. Nothing is hidden.">
         CR ⚠
@@ -13,11 +13,11 @@ export function App({ kind }: AppProps) {
     )
   }
 
-  // TODO(v0.1): drawer with the unresolved worklist. For now the handle only
-  // proves the shadow DOM mount works on a classic-build PR page.
+  // TODO(A9): the drawer. The handle takes its count from the state now, so
+  // what is missing is the list, not the wiring.
   return (
-    <div class="handle" title="CodeRabbit Triage (scaffold)">
-      CR
+    <div class="handle" title={`CodeRabbit Triage: ${state.counts.unresolved} unresolved`}>
+      CR {state.counts.unresolved}
     </div>
   )
 }

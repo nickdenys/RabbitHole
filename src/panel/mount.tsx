@@ -1,5 +1,5 @@
 import { render } from 'preact'
-import type { PageKind } from '../types'
+import type { TriageState } from '../engine'
 import { App } from './App'
 import styles from './panel.css?inline'
 
@@ -10,17 +10,17 @@ let shadowRoot: ShadowRoot | null = null
 /**
  * The drawer lives in a shadow root on a host appended to <body>, outside
  * React's tree, so neither GitHub's styles nor its rerenders can touch it.
+ *
+ * Every pass publishes state, so this runs often and has to be cheap and
+ * idempotent. It is: preact diffs, and the host is only rebuilt when Turbo has
+ * taken the old one away with the body.
  */
-export function isPanelMounted(): boolean {
-  return document.getElementById(HOST_ID) !== null
-}
-
-export function updatePanel(kind: PageKind): void {
-  if (kind === 'not-pr') {
+export function updatePanel(state: TriageState): void {
+  if (state.kind === 'not-pr') {
     unmountPanel()
     return
   }
-  render(<App kind={kind} />, ensureShadowRoot())
+  render(<App state={state} />, ensureShadowRoot())
 }
 
 function ensureShadowRoot(): ShadowRoot {

@@ -6,7 +6,7 @@ CodeRabbit's comments come out of the timeline and go into a side drawer, where 
 
 **The checklist is the point. Hiding the comments is just how the findings get somewhere you can work them.** Existing tools (CodeRabbit's own Houdini, various userscripts) only do the hiding.
 
-**Status: early scaffold.** It builds, loads unpacked, and detects supported pages. Parsing, hiding and the drawer are in progress. See the roadmap.
+**Status: it hides, it does not yet list.** It builds, loads unpacked, reads every CodeRabbit thread on a supported pull request page and takes the ones it can prove are CodeRabbit's out of the timeline. The panel is still a handle carrying the unresolved count; the drawer that holds the worklist is next. See the roadmap.
 
 ## The invariants
 
