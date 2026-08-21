@@ -21,11 +21,14 @@ export type EmptyState = 'unsupported' | 'no-findings' | 'all-done'
  *   else's. It is a human conversation on the pull request, still in the
  *   timeline where it belongs, and it is not part of a CodeRabbit worklist.
  *
- *   **`collapsed`** is a resolved thread whose comments GitHub did not render,
- *   so there is nothing to say about it beyond its file: no author, no title,
- *   no severity. v0.1 is the unresolved worklist and B3 fetches these. Until
- *   then the drawer says how many it is not showing rather than listing 97
- *   rows that all read "unreadable".
+ *   **`collapsed`** is a resolved thread whose comments GitHub did not render
+ *   and the deferred fetch has not answered for yet, so there is nothing to say
+ *   about it beyond its file: no author, no title, no severity. The drawer says
+ *   how many it is not showing rather than listing 97 rows that all read
+ *   "unreadable", and each one leaves this count as its fragment arrives. A
+ *   fetch that failed is not this: it is listed, badged and counted as
+ *   unreadable, because a thread nobody could read is exactly what this
+ *   extension must never omit.
  *
  * **A thread resolved in this session is the exception to the second one.** It
  * collapses the moment GitHub accepts the click, and dropping it would make the
@@ -61,17 +64,23 @@ function described(row: TriageRow): TriageRow {
 }
 
 /**
- * Threads that exist, are resolved, and cannot be read until the v0.2 fetch.
- * Counted so the drawer can admit to them; see `listedRows`.
+ * Threads that exist, are resolved, and have not been read back yet. Counted so
+ * the drawer can admit to them; see `listedRows`.
  */
 export function unreadCount(state: TriageState): number {
   return state.rows.filter(isUnread).length
 }
 
 /**
- * Collapsed, and with nothing held about it from earlier in the session. The
- * one predicate behind both the list and the count, so a thread can never be
- * both drawn and reported as one the drawer is not showing.
+ * Collapsed, unfetched, and with nothing held about it from earlier in the
+ * session. The one predicate behind both the list and the count, so a thread
+ * can never be both drawn and reported as one the drawer is not showing.
+ *
+ * It is now a transient state rather than a permanent one: opening the drawer
+ * starts the fetch, every answer moves the row into the list, and a thread the
+ * fetch could not read gets 'fetch-failed' and is listed as unreadable rather
+ * than staying in this count. So the number counts requests in flight, which is
+ * what the drawer's notice says about it.
  */
 function isUnread(row: TriageRow): boolean {
   if (row.verdict.hide || row.verdict.reason !== 'collapsed') return false
@@ -100,6 +109,7 @@ export function badges(row: TriageRow): string[] {
   if (thread.authors && thread.authors.pending > 0) found.push('Pending')
   if (hasHumanReply(row)) found.push('Human reply')
   if (!row.verdict.hide && row.verdict.reason === 'unparsed') found.push('Unparsed')
+  if (!row.verdict.hide && row.verdict.reason === 'fetch-failed') found.push('Unfetched')
 
   return found
 }
@@ -133,7 +143,9 @@ export function keptReason(row: TriageRow): string | null {
     case 'unparsed':
       return 'Left in the timeline: this thread could not be read'
     case 'collapsed':
-      return 'Left in the timeline: resolved, and its comments are not on the page'
+      return 'Left in the timeline: resolved, and its comments are still being read'
+    case 'fetch-failed':
+      return 'Left in the timeline: resolved, and its comments could not be fetched'
     case 'not-coderabbit':
       return 'Left in the timeline: not a CodeRabbit thread'
   }

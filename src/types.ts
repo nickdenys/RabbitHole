@@ -28,8 +28,21 @@ export type PageKind = 'not-pr' | 'classic' | 'react' | 'unknown'
  *   'unknown-author'  blocking, produced from A3
  *   'no-body'         blocking, produced from A3
  *   'no-triple'       gap, produced from A4
+ *   'fetch-failed'    blocking, produced from B3
+ *
+ * 'fetch-failed' is the one that is not about markup. A collapsed thread whose
+ * deferred fragment did not come back, or came back unreadable, is a thread the
+ * extension asked about and cannot describe, which is different from one it has
+ * not asked about yet. Both keep the thread visible; only this one is worth
+ * warning the reader about, because the other is a request still in flight.
  */
-export type ParseProblem = 'no-id' | 'no-file' | 'unknown-author' | 'no-body' | 'no-triple'
+export type ParseProblem =
+  | 'no-id'
+  | 'no-file'
+  | 'unknown-author'
+  | 'no-body'
+  | 'no-triple'
+  | 'fetch-failed'
 
 /**
  * Who wrote a thread, counted rather than summarised, so the panel can badge
@@ -69,13 +82,20 @@ export interface Thread {
   file: string | null
   resolved: boolean
   outdated: boolean
-  /** Body absent and only fetchable, which is the v0.2 deferred fetch. */
+  /**
+   * Body absent from the page and only fetchable, which is the deferred fetch.
+   *
+   * A fact about the page, never about what the extension knows: it stays true
+   * after B3 has read the thread over the network, and `authors` is what says
+   * whether that read happened.
+   */
   collapsed: boolean
   deferredUrl: string | null
   /**
-   * Null whenever attribution failed, which includes every collapsed thread.
-   * Null always comes with the blocking 'unknown-author' problem, and a thread
-   * carrying it is never hidden (invariant 2).
+   * Null whenever attribution failed, which includes every collapsed thread the
+   * deferred fetch has not answered for. Null always comes with a blocking
+   * problem, 'unknown-author' or 'fetch-failed', and a thread carrying it is
+   * never hidden (invariant 2).
    */
   authors: ThreadAuthors | null
   problems: ParseProblem[]

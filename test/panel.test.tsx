@@ -105,8 +105,12 @@ function stateOf(rows: TriageRow[], over: Partial<TriageState> = {}): TriageStat
       total: threads.length,
       unresolved: threads.filter((t) => !t.resolved).length,
       hidden: hidden.length,
-      unparsed: rows.filter((r) => !r.verdict.hide && r.verdict.reason === 'unparsed').length,
+      unparsed: rows.filter(
+        (r) => !r.verdict.hide && (r.verdict.reason === 'unparsed' || r.verdict.reason === 'fetch-failed'),
+      ).length,
     },
+    // Overridden by the cases that assert the drawer asks for the fetch.
+    readResolved: () => {},
     ...over,
   }
 }
@@ -302,12 +306,39 @@ describe('the panel', () => {
     expect(reasons).toEqual(['Left in the timeline: someone replied to it'])
   })
 
-  it('admits to the resolved threads it cannot read yet', async () => {
+  it('admits to the resolved threads it has not read back yet', async () => {
     const host = mount(stateOf([row(), row({ thread: { id: '2', resolved: true }, verdict: kept('collapsed') })]))
     await click(host, '.handle')
 
     expect(host.querySelector('.rows')?.children).toHaveLength(1)
-    expect(host.textContent).toContain('1 resolved thread not listed')
+    expect(host.textContent).toContain('Reading 1 resolved thread from GitHub')
+  })
+
+  // The other half of that, and the rule B3 exists for: a thread the fetch
+  // could not read is never one of the ones quietly left off the list.
+  it('lists a thread the fetch could not read, badged and counted', async () => {
+    const host = mount(
+      stateOf([row({ thread: { id: '2', resolved: true, collapsed: true }, authors: null, finding: null, verdict: kept('fetch-failed') })]),
+    )
+    await click(host, '.handle')
+
+    expect(host.querySelector('.rows')?.children).toHaveLength(1)
+    expect([...host.querySelectorAll('.badge')].map((b) => b.textContent)).toContain('Unfetched')
+    expect(host.textContent).toContain('Left in the timeline: resolved, and its comments could not be fetched')
+    expect(host.textContent).toContain('1 thread could not be read')
+    expect(host.textContent).not.toContain('Reading')
+  })
+
+  // Lazy on panel open, per [[Design decisions]]. The drawer is the only thing
+  // that ever asks, so a reader who never opens it costs GitHub nothing.
+  it('asks for the resolved threads only once the drawer is open', async () => {
+    const readResolved = vi.fn()
+    const host = mount(stateOf([row()], { readResolved }))
+
+    expect(readResolved).not.toHaveBeenCalled()
+
+    await click(host, '.handle')
+    expect(readResolved).toHaveBeenCalled()
   })
 
   it('tells "no findings" and "nothing left to do" apart', async () => {

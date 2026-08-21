@@ -61,6 +61,7 @@ describe('hideVerdict', () => {
       thread({ collapsed: true }),
       thread({ problems: ['no-id'] }),
       thread({ authors: null, problems: ['unknown-author'] }),
+      thread({ collapsed: true, authors: null, problems: ['unknown-author', 'fetch-failed'] }),
       thread({}, { rootIsCodeRabbit: false }),
       thread({}, { pending: 1, comments: 1, fromCodeRabbit: 0, fromHumans: 1, allFromCodeRabbit: false }),
     ]
@@ -89,6 +90,16 @@ describe('hideVerdict', () => {
     for (const mode of MODES) {
       expect(hideVerdict(thread({ problems: [problem] }), mode)).toEqual({ hide: false, reason: 'unparsed' })
     }
+  })
+
+  // 'fetch-failed' blocks as hard as the other three. It is listed apart
+  // because it answers with its own reason rather than with 'unparsed', which
+  // is what lets the drawer say the network failed rather than the markup did.
+  it.each(MODES)('keeps a thread carrying the blocking problem fetch-failed in %s mode', (mode) => {
+    expect(hideVerdict(thread({ problems: ['fetch-failed'] }), mode)).toEqual({
+      hide: false,
+      reason: 'fetch-failed',
+    })
   })
 
   const GAPS: ParseProblem[] = ['no-file', 'no-triple']
@@ -121,6 +132,32 @@ describe('hideVerdict', () => {
   it('reports collapsed rather than unparsed when a thread is both', () => {
     const both = thread({ collapsed: true, authors: null, problems: ['unknown-author', 'no-id'], id: '' })
     expect(hideVerdict(both, 'safe')).toEqual({ hide: false, reason: 'collapsed' })
+  })
+
+  // B3. A thread whose comments came back off the deferred endpoint is
+  // attributed, and 'collapsed' is a statement about the page rather than a
+  // permanent veto: it stays true and stops mattering.
+  it.each(MODES)('hides a collapsed thread the fetch read back, in %s mode', (mode) => {
+    const fetched = thread({ collapsed: true, deferredUrl: '/owner/repo/pull/1/threads/1', resolved: true })
+    expect(hideVerdict(fetched, mode)).toEqual({ hide: true })
+  })
+
+  it.each(MODES)('keeps a thread whose fetch failed, in %s mode', (mode) => {
+    const failed = thread({
+      collapsed: true,
+      deferredUrl: '/owner/repo/pull/1/threads/1',
+      authors: null,
+      problems: ['unknown-author', 'fetch-failed'],
+    })
+    expect(hideVerdict(failed, mode)).toEqual({ hide: false, reason: 'fetch-failed' })
+  })
+
+  // The more specific of the two answers wins, for the same reason 'collapsed'
+  // beats 'unparsed': the fetch that would have fixed 'collapsed' has already
+  // run, so telling the reader to wait for it would be a lie.
+  it('reports fetch-failed rather than collapsed when a thread is both', () => {
+    const both = thread({ collapsed: true, authors: null, problems: ['unknown-author', 'fetch-failed'] })
+    expect(hideVerdict(both, 'safe')).toEqual({ hide: false, reason: 'fetch-failed' })
   })
 
   // Resolved and outdated say nothing about authorship, so they say nothing

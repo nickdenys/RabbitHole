@@ -3,7 +3,13 @@ import type { ParseProblem, Thread } from '../types'
 export type HideMode = 'safe' | 'aggressive'
 
 /** Why a thread stayed visible. Only ever set on a `hide: false` verdict. */
-export type HideReason = 'not-coderabbit' | 'human-activity' | 'pending' | 'unparsed' | 'collapsed'
+export type HideReason =
+  | 'not-coderabbit'
+  | 'human-activity'
+  | 'pending'
+  | 'unparsed'
+  | 'collapsed'
+  | 'fetch-failed'
 
 export type HideVerdict = { hide: true } | { hide: false; reason: HideReason }
 
@@ -16,7 +22,7 @@ export type HideVerdict = { hide: true } | { hide: false; reason: HideReason }
  * Written out rather than derived, so adding a `ParseProblem` is a decision
  * about whether it blocks rather than a silent default either way.
  */
-const BLOCKING: readonly ParseProblem[] = ['no-id', 'unknown-author', 'no-body']
+const BLOCKING: readonly ParseProblem[] = ['no-id', 'unknown-author', 'no-body', 'fetch-failed']
 
 /**
  * Whether a thread may be hidden, and when it may not, why.
@@ -36,14 +42,24 @@ const BLOCKING: readonly ParseProblem[] = ['no-id', 'unknown-author', 'no-body']
  * makes both invariants hold in both modes rather than in one of them.
  */
 export function hideVerdict(thread: Thread, mode: HideMode): HideVerdict {
-  // Ahead of the blocking-problem check, which is a deliberate departure from
-  // the build plan's order. A2 gives every collapsed thread the blocking
+  // Both ahead of the blocking-problem check, which is a deliberate departure
+  // from the build plan's order. A2 gives every collapsed thread the blocking
   // 'unknown-author' problem, because its comments are genuinely not in the
   // page, so testing problems first would answer 'unparsed' for all 97
-  // collapsed threads in the fixtures and leave 'collapsed' unreachable. Both
-  // orders keep the thread visible; this one tells the panel which of the two
-  // things is actually wrong, and only 'collapsed' has a fix (the v0.2 fetch).
-  if (thread.collapsed) return { hide: false, reason: 'collapsed' }
+  // collapsed threads in the fixtures and leave both of these unreachable. All
+  // three orders keep the thread visible; this one tells the panel which of the
+  // three things is actually wrong, and they have different fixes.
+  //
+  // 'fetch-failed' first, because it is only ever set on a collapsed thread and
+  // is the more specific answer: the fetch that would have fixed 'collapsed'
+  // has already run and did not.
+  if (thread.problems.includes('fetch-failed')) return { hide: false, reason: 'fetch-failed' }
+
+  // `authors === null` is what makes this a statement about the fetch rather
+  // than about the page. A thread B3 has read is still collapsed, its comments
+  // are still not in the timeline, and there is nothing left to wait for, so it
+  // goes on to the ordinary rules and can be hidden like any other.
+  if (thread.collapsed && thread.authors === null) return { hide: false, reason: 'collapsed' }
 
   const authors = thread.authors
 

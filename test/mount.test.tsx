@@ -26,6 +26,7 @@ function state(kind: PageKind): TriageState {
     notes: [],
     hidden: new Set(),
     counts: { total: 0, unresolved: 0, hidden: 0, unparsed: 0 },
+    readResolved: () => {},
   }
 }
 

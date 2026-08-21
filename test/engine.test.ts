@@ -6,7 +6,7 @@ import {
   revealThread,
   sessionFinding,
 } from '../src/panel/actions'
-import { fixtureNames, loadFixture } from './support/fixture'
+import { fixtureNames, loadFixture, loadFragment } from './support/fixture'
 
 const HIDDEN = '.crt-hidden'
 const STYLE_ID = 'coderabbit-triage-style'
@@ -43,6 +43,7 @@ afterEach(() => {
   // them down in the order they were layered.
   while (teardowns.length > 0) teardowns.pop()?.()
   vi.useRealTimers()
+  vi.unstubAllGlobals()
   setUrl(PR_URL)
 
   // The teardown above already does this on the engine's own path. Repeating it
@@ -501,5 +502,217 @@ describe('navigation', () => {
 
     expect(latest(states).counts.hidden).toBe(3)
     expect(d.querySelectorAll(HIDDEN).length).toBeGreaterThan(0)
+  })
+})
+
+/**
+ * A resolved thread as GitHub renders one: an id, a file, a deferred URL, and
+ * no comments at all. Everything the fetch needs and nothing the parsers can
+ * read without it.
+ */
+function collapsedMarkup(id: number): string {
+  return `
+    <div class="js-timeline-item">
+      <turbo-frame id="review-thread-or-comment-id-${id}">
+        <review-thread-collapsible
+          data-resolved="true"
+          data-deferred-content-url="${deferredUrl(id)}"
+        >
+          <a class="text-mono text-small Link--primary" href="/owner/repo/pull/1/files#diff-x">src/app.ts</a>
+        </review-thread-collapsible>
+      </turbo-frame>
+    </div>`
+}
+
+function deferredUrl(id: number): string {
+  return `/owner/repo/pull/1/threads/${id}?rendering_on_files_tab=false`
+}
+
+/** A real response body, saved off GitHub's own endpoint. See test/fixtures/README.md. */
+const FRAGMENT = loadFragment('deferred-thread')
+const FRAGMENT_TITLE = 'Make these tests independent and deterministic.'
+
+/**
+ * Stand in for the network, and record what was asked for.
+ *
+ * A body of `null` is a request that fails, which is the case the worklist has
+ * to survive: `fetchThreadHtml` flattens it and the engine has to say so on the
+ * row rather than dropping it.
+ */
+function stubFetch(bodies: Record<string, string | null>): string[] {
+  const asked: string[] = []
+
+  vi.stubGlobal('fetch', async (url: string) => {
+    asked.push(url)
+
+    const body = bodies[url]
+    if (body === undefined || body === null) return { ok: false, status: 404, text: async () => 'Not Found' }
+
+    return { ok: true, status: 200, text: async () => body }
+  })
+
+  return asked
+}
+
+describe('reading the resolved threads', () => {
+  it('asks for nothing until the panel asks', async () => {
+    const asked = stubFetch({ [deferredUrl(1)]: FRAGMENT })
+    const states = engineOn(doc(collapsedMarkup(1)))
+
+    await settle()
+
+    // The worklist is on screen and the network has not been touched. That is
+    // the whole of "lazy, on panel open": the first pass is never behind a
+    // request, and a reader who never opens the drawer never makes one.
+    expect(asked).toEqual([])
+    expect(latest(states).counts.total).toBe(1)
+    expect(latest(states).rows[0].verdict).toEqual({ hide: false, reason: 'collapsed' })
+  })
+
+  it('reads a collapsed thread back and describes it like any other', async () => {
+    const asked = stubFetch({ [deferredUrl(1)]: FRAGMENT })
+    const states = engineOn(doc(collapsedMarkup(1)))
+
+    latest(states).readResolved()
+    await settle()
+
+    expect(asked).toEqual([deferredUrl(1)])
+
+    const row = latest(states).rows[0]
+    expect(row.thread.authors?.allFromCodeRabbit).toBe(true)
+    expect(row.thread.problems).toEqual([])
+    expect(row.finding?.title).toBe(FRAGMENT_TITLE)
+    expect(row.finding?.severity).toBe('minor')
+
+    // Attributed at last, so the policy can act on it: a resolved CodeRabbit
+    // thread with nobody else in it comes off the timeline like any other.
+    expect(row.verdict).toEqual({ hide: true })
+    expect(isHidden(row.thread.el)).toBe(true)
+  })
+
+  it('leaves identity and state with the page', async () => {
+    stubFetch({ [deferredUrl(1)]: FRAGMENT })
+    const states = engineOn(doc(collapsedMarkup(1)))
+
+    latest(states).readResolved()
+    await settle()
+
+    // None of these is in the fragment, and none of them moves. The stub in the
+    // page is the only place they exist. See [[DOM reference]].
+    const { thread } = latest(states).rows[0]
+    expect(thread.id).toBe('1')
+    expect(thread.file).toBe('src/app.ts')
+    expect(thread.resolved).toBe(true)
+    expect(thread.collapsed).toBe(true)
+  })
+
+  it.each([
+    ['a request that failed', null],
+    ['a body with no comment in it', '<div class="js-inline-comments-container"></div>'],
+  ])('lists a thread it could not read: %s', async (_name, body) => {
+    const states = engineOn(doc(collapsedMarkup(1)))
+    stubFetch({ [deferredUrl(1)]: body })
+
+    latest(states).readResolved()
+    await settle()
+
+    // Visible, on the page and in the panel, and counted in the warning. The
+    // one thing it must never be is quietly absent.
+    const row = latest(states).rows[0]
+    expect(row.verdict).toEqual({ hide: false, reason: 'fetch-failed' })
+    expect(row.thread.problems).toContain('fetch-failed')
+    expect(isHidden(row.thread.el)).toBe(false)
+    expect(latest(states).counts.unparsed).toBe(1)
+  })
+
+  it('asks once per thread, however often it is asked', async () => {
+    const asked = stubFetch({ [deferredUrl(1)]: FRAGMENT, [deferredUrl(2)]: null })
+    const states = engineOn(doc(collapsedMarkup(1) + collapsedMarkup(2)))
+
+    // Twice before anything lands, so the second call has to skip requests that
+    // are in flight rather than only ones that have answered.
+    latest(states).readResolved()
+    latest(states).readResolved()
+    await settle()
+
+    latest(states).readResolved()
+    await settle()
+
+    // Including the one that failed: a dead thread is asked about once per
+    // page, not once per render of the open drawer.
+    expect(asked).toEqual([deferredUrl(1), deferredUrl(2)])
+  })
+
+  it('prefers the page to the fragment when GitHub renders the thread after all', async () => {
+    const d = doc(collapsedMarkup(1))
+    const states = engineOn(d)
+    stubFetch({ [deferredUrl(1)]: FRAGMENT })
+
+    latest(states).readResolved()
+    await settle()
+    expect(latest(states).rows[0].finding?.title).toBe(FRAGMENT_TITLE)
+
+    // GitHub expands the thread, which is what an unresolve does. What is on
+    // the screen now wins over what the network said earlier.
+    d.body.innerHTML = threadMarkup(1)
+    await settle()
+
+    expect(latest(states).rows[0].finding?.title).toBe('Findings.')
+  })
+
+  it('replaces the session finding of a thread resolved here', async () => {
+    const d = doc(resolvableMarkup(1))
+    const states = engineOn(d)
+    stubFetch({ [deferredUrl(1)]: FRAGMENT })
+
+    expect(resolveThread(latest(states).rows[0])).toBe(true)
+    expect(sessionFinding('1')?.title).toBe('Findings.')
+
+    // GitHub accepts the resolve and swaps in the collapsed partial, which is
+    // the moment A11's cache became the only description of this thread.
+    d.body.innerHTML = collapsedMarkup(1)
+    await settle()
+    expect(latest(states).rows[0].finding).toBeNull()
+
+    latest(states).readResolved()
+    await settle()
+
+    // And the moment it stopped being: the row now draws from what GitHub
+    // actually holds, and the cache is no longer consulted for it.
+    expect(latest(states).rows[0].finding?.title).toBe(FRAGMENT_TITLE)
+  })
+
+  it('drops a fetch that was still in flight when the page changed', async () => {
+    const d = doc(collapsedMarkup(1))
+    const states = engineOn(d)
+
+    let release: (() => void) | undefined
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+
+    let signal: AbortSignal | undefined
+    vi.stubGlobal('fetch', async (_url: string, init: { signal?: AbortSignal }) => {
+      signal = init.signal
+      await held
+      return { ok: true, status: 200, text: async () => FRAGMENT }
+    })
+
+    latest(states).readResolved()
+    await vi.advanceTimersByTimeAsync(0)
+
+    // The same document, deliberately: a reset that only worked because Turbo
+    // swapped the body would pass here without aborting anything.
+    navigateTo(OTHER_PR, d)
+    release?.()
+    await settle()
+
+    expect(signal?.aborted).toBe(true)
+
+    // Answered after the navigation and therefore never merged. A fragment from
+    // the pull request being left, keyed by an id that exists on the one being
+    // arrived at, is another review's finding on this review's row.
+    expect(latest(states).rows[0].finding).toBeNull()
+    expect(latest(states).rows[0].verdict).toEqual({ hide: false, reason: 'collapsed' })
   })
 })

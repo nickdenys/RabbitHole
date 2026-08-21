@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks'
+import { useLayoutEffect, useState } from 'preact/hooks'
 import type { TriageRow, TriageState } from '../engine'
 import { Row } from './Row'
 import { emptyState, unreadCount, type EmptyState } from './rows'
@@ -21,6 +21,21 @@ export function Drawer({ state, listed, onClose }: DrawerProps) {
   // and preact keeps this across those renders, so a churning page does not
   // reshuffle the list under the reader.
   const [axis, setAxis] = useState<SortAxis>('severity')
+
+  // "Lazy, on panel open" in one line: this component exists only while the
+  // drawer is open, so mounting it is the open and unmounting it is the close,
+  // and a reader who never opens the drawer never asks GitHub for anything.
+  //
+  // Every render rather than only the first, because the request set grows: a
+  // thread resolved here collapses, and the pass that notices hands down a new
+  // state whose render picks it up. The engine skips anything already answered
+  // or in flight, so the repeat costs a walk over the thread list.
+  //
+  // Layout rather than plain, for the same reason as `Row`'s: preact defers
+  // `useEffect` behind a frame, and there is no reason for the first request to
+  // wait on paint. It publishes nothing synchronously, so no render is nested
+  // inside this one.
+  useLayoutEffect(() => state.readResolved())
 
   const empty = emptyState(state, listed)
   const open = listed.filter((row) => !row.thread.resolved).length
@@ -56,8 +71,8 @@ export function Drawer({ state, listed, onClose }: DrawerProps) {
 
       {empty !== 'unsupported' && unread > 0 && (
         <p class="notice">
-          {count(unread, 'resolved thread')} not listed: GitHub does not render a resolved thread's
-          comments, and fetching them comes in v0.2.
+          Reading {count(unread, 'resolved thread')} from GitHub. GitHub does not render a resolved
+          thread's comments, so each one is fetched and listed as it arrives.
         </p>
       )}
     </aside>

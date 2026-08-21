@@ -23,8 +23,9 @@ markup proves nothing in October.
 
 ```
 test/fixtures/
-  public/    committed, from public PRs
-  private/   gitignored, local only
+  public/             committed, from public PRs
+  public/fragments/   committed, single deferred thread responses
+  private/            gitignored, local only
 ```
 
 ## Capturing
@@ -78,6 +79,42 @@ testable with any document the detector does not recognise. The React label
 itself stays covered by the hand built case in `test/detect.test.ts`, whose
 selector was verified against a real React page on 11 August 2026.
 
+## The deferred fragments
+
+`public/fragments/` holds responses from GitHub's deferred thread endpoint, the
+one a collapsed thread names in `data-deferred-content-url`. They are what
+`src/fetch/parse.ts` reads, and they are not pages: two or three root divs, the
+diff hunk and `.js-inline-comments-container`, with no `<html>`, no timeline
+item and no `review-thread-collapsible` around them.
+
+They live in their own directory for that reason. `fixtureNames()` is walked by
+the engine and invariant suites, which assert a timeline, a classic build and a
+thread count on everything they find, and a fragment answers none of those.
+Fragments come back from `fragmentNames()` and `loadFragment()` instead, as text
+rather than as a Document, because text is what `fetchThreadHtml` yields.
+
+Captured 21 August 2026 by fetching the URL directly. **Logged out**, which the
+endpoint allows for a public repository: five header variants returned a byte
+identical body on 21 August, and a session changes nothing the parsers read.
+Provenance is an HTML comment on the first line, since a fragment has no head.
+
+| Name | Source thread | Comments | Root author | Size |
+| --- | --- | --- | --- | --- |
+| `deferred-thread.html` | [nickdenys/optios-booking#1](https://github.com/nickdenys/optios-booking/pull/1), thread 2596022521 | 1 | CodeRabbit, with a 🟡 Minor triple and an agent prompt | 16 KB |
+| `deferred-thread-reply.html` | [leynos/cuprum#234](https://github.com/leynos/cuprum/pull/234), thread 2481955968 | 2 | a person, replied to by CodeRabbit | 34 KB |
+
+`deferred-thread.html` comes from a repository of Nick's own, so it can be
+recaptured when GitHub moves, and it carries the leading
+`Comment on lines +4 to +5` header div that a range anchored thread gets and
+`deferred-thread-reply.html` does not. That difference is why the parser scopes
+to the parsed body rather than reading a root by index.
+
+**Its thread was open when it was captured**, which is a deviation from the
+build plan's "resolve one first". The endpoint renders the same partial either
+way: the cuprum thread beside it was resolved, and the two bodies have the same
+shape. What is still owed is [[Build plan|B4]]'s recapture of `resolvable.html`
+with a thread resolved on it, which is the only way to see the unresolve form.
+
 ### `resolvable.html` is the only one with a resolve form
 
 `form[action$="/resolve"]` counts 0 in the other four, every one captured logged
@@ -104,7 +141,7 @@ shares one parsed document across the assertions that only read.
 ## Reading them in tests
 
 ```ts
-import { loadFixture, fixtureNames } from './support/fixture'
+import { loadFixture, fixtureNames, loadFragment, fragmentNames } from './support/fixture'
 ```
 
 `loadFixture` returns a **fresh** Document per call, because the hide tests
