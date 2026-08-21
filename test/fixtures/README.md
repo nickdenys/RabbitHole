@@ -44,7 +44,30 @@ it. It also logs the counts (threads, resolved, CodeRabbit authored, Outdated
 labels) that later steps assert against, which is easier to check now, with the
 real page still in front of you, than later from the saved file.
 
+It refuses to build the file if a token survives, because a fixture is
+committed and a leak cannot be taken back.
+
 Move the download into `public/` and fill in a row below.
+
+### Tokens hide inside `<template>`
+
+**Found 21 August 2026, while recapturing `resolvable.html`.** The redaction pass
+used `clone.querySelectorAll(...)`, which does not descend into a `<template>`:
+its children live in a separate `content` fragment rather than in the document
+tree, so a selector walks straight past them. GitHub renders its inline comment
+form inside a template, one per thread, each with a live `authenticity_token`.
+
+That capture came out with 95 tokens redacted and 9 untouched, all 9 inside
+templates. `scrub` now walks template content recursively and the script throws
+rather than downloading if anything is left, so a future hiding place fails the
+capture instead of shipping.
+
+**The fixture committed on 20 August carried 10 live tokens for the same
+reason**, and they are in git history. A CSRF token is scoped to one session and
+dies with it, so the exposure ends when that session does, but the four other
+committed fixtures were checked and are clean: their repositories gave the
+reader no write access, so GitHub rendered no forms and their templates hold no
+tokens.
 
 To capture the "Pending in batch" state, start a review on a public PR without
 submitting it, capture, then discard the review.
@@ -65,7 +88,7 @@ committed file, taken by walking the fixture rather than by reading the page.
 | `human-replies.html` | [leynos/cuprum#234](https://github.com/leynos/cuprum/pull/234) | 103 | 76 | 27, of which 10 have a human reply | 57 | 8.3 MB |
 | `pending-in-batch.html` | [InseeFrLab/onyxia#1072](https://github.com/InseeFrLab/onyxia/pull/1072) | 19 | 10 | 8, plus 2 pending comments | 11 | 1.8 MB |
 | `no-coderabbit.html` | [laravel/framework#54450](https://github.com/laravel/framework/pull/54450) | 3 | 1 | none, zero CodeRabbit anywhere | 2 | 800 KB |
-| `resolvable.html` | [nickdenys/optios-booking#1](https://github.com/nickdenys/optios-booking/pull/1) | 10 | 0 | 10, each with a resolve form | 0 | 1.7 MB |
+| `resolvable.html` | [nickdenys/optios-booking#1](https://github.com/nickdenys/optios-booking/pull/1) | 10 | 2 | 8, each with a resolve form | 0 | 1.6 MB |
 
 ### There is no React fixture, on purpose
 
@@ -112,25 +135,45 @@ to the parsed body rather than reading a root by index.
 **Its thread was open when it was captured**, which is a deviation from the
 build plan's "resolve one first". The endpoint renders the same partial either
 way: the cuprum thread beside it was resolved, and the two bodies have the same
-shape. What is still owed is [[Build plan|B4]]'s recapture of `resolvable.html`
-with a thread resolved on it, which is the only way to see the unresolve form.
+shape. B4 has since recaptured `resolvable.html` with two threads resolved, so
+nothing is owed here any more.
 
 ### `resolvable.html` is the only one with a resolve form
 
 `form[action$="/resolve"]` counts 0 in the other four, every one captured logged
 in. GitHub renders that button only for a reader who can actually use it, which
 on a stranger's repository is nobody. This one comes from a public repository of
-Nick's own with CodeRabbit installed, so the buttons are there: 10 forms, each
+Nick's own with CodeRabbit installed, so the buttons are there: 8 forms, each
 with its thread id in the action, exactly the shape [[DOM reference]] records.
+It is also the only fixture with a `/unresolve` form, for the same reason.
 
 Because the repository is his, this fixture can be recaptured whenever GitHub
 moves, which is what [[Build plan|C1]] asks for. The other four cannot.
 
-**It still has nothing resolved.** All 10 threads are open, so the file carries
-no unresolve form and no `data-deferred-content-url`. [[Build plan|B4]] needs the
-first and [[Build plan|B3]] needs the second, and both arrive by resolving a
-thread on that PR and recapturing over this file. That also answers B4's open
-question of whether the unresolve form exists while the thread is collapsed.
+**Recaptured 21 August 2026 for [[Build plan|B4]]**, with two threads resolved
+and one of those two expanded by hand before capturing. That is what makes this
+the only fixture that can answer B4 at all, because it holds all three states of
+a thread on a repository the reader can write to:
+
+| State | Count | Carries |
+| --- | --- | --- |
+| Open | 8 | a `/resolve` form |
+| Resolved, expanded | 1 | a `/unresolve` form, its comments, no deferred URL |
+| Resolved, collapsed | 1 | a `data-deferred-content-url` and **no form at all** |
+
+The last row is the answer to B4's question. On a stranger's pull request a
+collapsed thread has no form either, but there the reason is permission, so the
+absence proves nothing. Here the same reader has a resolve form on eight other
+threads, which leaves collapsing as the only explanation. See [[DOM reference]].
+
+The expanded one was expanded by clicking GitHub's own chevron and waiting for
+the deferred fetch, then capturing. Expanding **removes**
+`data-deferred-content-url`, so one thread cannot show both states, which is why
+two are resolved rather than one.
+
+The recapture moved every pinned count that mentions this fixture: nine threads
+readable rather than ten, nine hidden rather than ten, eight resolve forms
+rather than ten. All of them are in the count tables in `test/`.
 
 **`human-replies.html` is 8.3 MB**, because reaching its human replies meant
 clicking "N hidden items" until the whole 316 item timeline was loaded. It is the

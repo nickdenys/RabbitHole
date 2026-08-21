@@ -56,7 +56,7 @@ const HIDES = {
   'human-replies': { safe: 17, aggressive: 27 },
   'pending-in-batch': { safe: 7, aggressive: 7 },
   'no-coderabbit': { safe: 0, aggressive: 0 },
-  'resolvable': { safe: 10, aggressive: 10 },
+  'resolvable': { safe: 9, aggressive: 9 },
 } as const
 
 const BLOCKING = ['no-id', 'unknown-author', 'no-body']
@@ -159,5 +159,5 @@ it('hides nothing at all on a PR CodeRabbit never touched', () => {
 it('hides something somewhere, so the invariants are not vacuous', () => {
   const hidden = NAMES.flatMap((name) => scans[name].filter((thread) => hideVerdict(thread, 'safe').hide))
 
-  expect(hidden.length).toBe(36)
+  expect(hidden.length).toBe(35)
 })

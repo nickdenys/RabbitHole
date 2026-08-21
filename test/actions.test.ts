@@ -7,6 +7,7 @@ import {
   resolveThread,
   revealThread,
   sessionFinding,
+  unresolveThread,
 } from '../src/panel/actions'
 import { listedRows, unreadCount } from '../src/panel/rows'
 import { scanThreads } from '../src/parse/thread'
@@ -161,15 +162,238 @@ describe('resolveThread', () => {
     expect(resolveThread(rowOver(el))).toBe(false)
   })
 
-  it('finds the button in GitHub s real markup, on every thread of the fixture', () => {
+  /**
+   * Every thread GitHub still calls open. The other two are B4's: one resolved
+   * and expanded, carrying an `/unresolve` form instead, and one resolved and
+   * collapsed, carrying no form at all.
+   */
+  it('finds the button in GitHub s real markup, on every open thread of the fixture', () => {
     const d = loadFixture('resolvable')
     const threads = scanThreads(d)
+    const open = threads.filter((thread) => !thread.resolved)
 
     expect(threads).toHaveLength(10)
-    for (const thread of threads) {
+    expect(open).toHaveLength(8)
+    for (const thread of open) {
       const button = thread.el.querySelector('form[action$="/resolve"] button')
       expect(button?.textContent?.trim(), thread.id).toBe('Resolve conversation')
     }
+  })
+})
+
+/**
+ * GitHub's markup for a resolved thread, in the two states it has.
+ *
+ * Both are copied from `resolvable.html`, captured 21 August 2026 on
+ * `nickdenys/optios-booking#1` while logged in as somebody who can write to it.
+ * That repository is the only place the question can be asked at all: on a
+ * stranger's pull request there is no form either way, and the absence proves
+ * nothing about collapsing.
+ */
+function unresolvableThread(action = '/owner/repo/pull/1/threads/2596049536/unresolve'): string {
+  return `
+    <review-thread-collapsible id="thread-1" data-resolved="true">
+      <button data-action="click:review-thread-collapsible#toggle" aria-expanded="true" type="button"></button>
+      <form action="/owner/repo/pull/1/review_comment/3819804339/minimize" data-turbo="false" method="post">
+        <button type="submit">Hide comment</button>
+      </form>
+      <form class="js-inline-comment-form" data-turbo="false" action="/owner/repo/pull/1/review_comment/create" method="post">
+        <button type="submit" class="review-simple-reply-button">Comment</button>
+      </form>
+      <form class="js-resolvable-timeline-thread-form" data-turbo="false" action="${action}" method="post">
+        <button type="submit" class="Button--secondary">
+          <span class="Button-content"><span class="Button-label">Unresolve conversation</span></span>
+        </button>
+      </form>
+    </review-thread-collapsible>`
+}
+
+/** The same thread before anyone expanded it: a stub, and not one form in it. */
+function collapsedResolvedThread(): string {
+  return `
+    <review-thread-collapsible id="thread-1" data-resolved="true"
+      data-deferred-content-url="/owner/repo/pull/1/threads/2596049562?rendering_on_files_tab=false">
+      <div class="js-toggle-outdated-comments">
+        <button data-target="review-thread-collapsible.button" data-action="click:review-thread-collapsible#toggle"
+          aria-expanded="false" type="button" class="review-thread-chevron"></button>
+        <a class="text-mono">test_optios.py</a>
+        <button data-action="click:review-thread-collapsible#toggle" type="button" class="review-thread-show-text">Show resolved</button>
+      </div>
+    </review-thread-collapsible>`
+}
+
+describe('unresolveThread', () => {
+  it('clicks GitHub s own unresolve button and reports that it did', () => {
+    const d = doc(unresolvableThread())
+    const el = d.querySelector('review-thread-collapsible') as Element
+    const clicked: Element[] = []
+    for (const button of d.querySelectorAll('button')) {
+      button.addEventListener('click', (event) => {
+        event.preventDefault()
+        clicked.push(event.currentTarget as Element)
+      })
+    }
+
+    expect(unresolveThread(rowOver(el, { thread: { resolved: true } }))).toBe('clicked')
+    expect(clicked).toHaveLength(1)
+    expect(clicked[0]?.textContent).toContain('Unresolve conversation')
+  })
+
+  /**
+   * The trap the leading slash exists for. `action$="resolve"` would match an
+   * unresolve action too, and `resolveThread` would then silently unresolve the
+   * thread the reader asked it to resolve. `$="/resolve"` cannot, because the
+   * last eight characters of `.../unresolve` are `nresolve`.
+   */
+  it('is the only one of the two selectors that matches an unresolve form', () => {
+    const d = doc(unresolvableThread())
+    const el = d.querySelector('review-thread-collapsible') as Element
+
+    expect(el.querySelector('form[action$="/unresolve"]')).not.toBeNull()
+    expect(el.querySelector('form[action$="/resolve"]')).toBeNull()
+    expect(resolveThread(rowOver(el, { thread: { resolved: true } }))).toBe(false)
+  })
+
+  // Two other submit buttons sit ahead of it in document order, `Hide comment`
+  // and the reply form's `Comment`, so anchoring on the action rather than on
+  // the thread is what keeps an unresolve from minimising the comment instead.
+  it('never touches the minimise or the reply button', () => {
+    const d = doc(unresolvableThread())
+    const el = d.querySelector('review-thread-collapsible') as Element
+    const others = [...d.querySelectorAll('button')].filter(
+      (b) => !b.textContent?.includes('Unresolve'),
+    )
+    const seen = vi.fn((event: Event) => event.preventDefault())
+    for (const button of others) button.addEventListener('click', seen)
+
+    unresolveThread(rowOver(el, { thread: { resolved: true } }))
+
+    expect(seen).not.toHaveBeenCalled()
+  })
+
+  it('goes through the form s submit event rather than around it', () => {
+    const d = doc(unresolvableThread())
+    const el = d.querySelector('review-thread-collapsible') as Element
+    const form = d.querySelector('.js-resolvable-timeline-thread-form') as HTMLFormElement
+    const submitters: unknown[] = []
+    form.addEventListener('submit', (event) => {
+      event.preventDefault()
+      submitters.push((event as SubmitEvent).submitter)
+    })
+
+    unresolveThread(rowOver(el, { thread: { resolved: true } }))
+
+    expect(submitters).toHaveLength(1)
+    expect((submitters[0] as Element).textContent).toContain('Unresolve conversation')
+  })
+
+  /**
+   * The step's own verify-first answer: there is no unresolve form on a
+   * collapsed thread, so the first press expands and says so rather than
+   * reporting a click that never happened.
+   */
+  it('expands a collapsed thread instead, because it has no form yet', () => {
+    const d = doc(collapsedResolvedThread())
+    const el = d.querySelector('review-thread-collapsible') as Element
+    const toggled: Element[] = []
+    for (const button of d.querySelectorAll('button')) {
+      button.addEventListener('click', (event) => toggled.push(event.currentTarget as Element))
+    }
+
+    expect(el.querySelectorAll('form')).toHaveLength(0)
+    expect(unresolveThread(rowOver(el, { thread: { resolved: true, collapsed: true } }))).toBe(
+      'expanding',
+    )
+    expect(toggled).toHaveLength(1)
+  })
+
+  // An expanded thread with no button is the ordinary no-write-access case, and
+  // it must not be reported as something a second press could fix.
+  it('reports unavailable on an expanded thread with no button', () => {
+    const d = doc(
+      '<review-thread-collapsible id="thread-1" data-resolved="true">' +
+        '<button data-action="click:review-thread-collapsible#toggle" aria-expanded="true" type="button"></button>' +
+        '</review-thread-collapsible>',
+    )
+    const el = d.querySelector('review-thread-collapsible') as Element
+
+    expect(unresolveThread(rowOver(el, { thread: { resolved: true } }))).toBe('unavailable')
+  })
+
+  it('reports unavailable when there is no toggle and no form at all', () => {
+    const d = doc('<review-thread-collapsible id="thread-1" data-resolved="true"></review-thread-collapsible>')
+    const el = d.querySelector('review-thread-collapsible') as Element
+
+    expect(unresolveThread(rowOver(el, { thread: { resolved: true } }))).toBe('unavailable')
+  })
+
+  it('is not fooled by a form whose action merely contains unresolve', () => {
+    const d = doc(unresolvableThread('/owner/repo/pull/1/unresolve/something-else'))
+    const el = d.querySelector('review-thread-collapsible') as Element
+
+    // The toggle says expanded, so there is nothing left to try.
+    expect(unresolveThread(rowOver(el, { thread: { resolved: true } }))).toBe('unavailable')
+  })
+
+  /**
+   * The cache is a record of what a thread said before it was resolved here,
+   * and an unresolve that GitHub has not confirmed must not take it away: the
+   * row would fall back to unreadable and drop out of the list, which is the
+   * one failure the cache exists to prevent.
+   */
+  it('leaves the session cache alone, because the click is not a done state', () => {
+    const resolvable = doc(resolvableThread())
+    resolveThread(rowOver(resolvable.querySelector('review-thread-collapsible') as Element))
+    expect(sessionFinding('thread-1')).toEqual(FINDING)
+
+    const d = doc(unresolvableThread())
+    unresolveThread(rowOver(d.querySelector('review-thread-collapsible') as Element, {
+      thread: { resolved: true },
+    }))
+
+    expect(sessionFinding('thread-1')).toEqual(FINDING)
+  })
+
+  describe('against GitHub s real markup', () => {
+    it('finds the unresolve form on the expanded resolved thread of the fixture', () => {
+      const threads = scanThreads(loadFixture('resolvable'))
+      const resolved = threads.filter((thread) => thread.resolved)
+      const expanded = resolved.filter((thread) => !thread.collapsed)
+
+      expect(resolved).toHaveLength(2)
+      expect(expanded).toHaveLength(1)
+
+      const button = expanded[0]!.el.querySelector('form[action$="/unresolve"] button')
+      expect(button?.textContent?.trim()).toBe('Unresolve conversation')
+      expect(unresolveThread(rowOver(expanded[0]!.el, { thread: { resolved: true } }))).toBe(
+        'clicked',
+      )
+    })
+
+    /**
+     * The verify-first answer, read off a repository the reader can write to so
+     * that permission is not the explanation. The collapsed thread has the
+     * deferred URL and no form; the expanded one has the form and no deferred
+     * URL. Expanding is what swaps them.
+     */
+    it('finds no form at all on the collapsed resolved thread of the fixture', () => {
+      const threads = scanThreads(loadFixture('resolvable'))
+      const collapsed = threads.filter((thread) => thread.resolved && thread.collapsed)
+
+      expect(collapsed).toHaveLength(1)
+      expect(collapsed[0]!.deferredUrl).not.toBeNull()
+      expect(collapsed[0]!.el.querySelectorAll('form')).toHaveLength(0)
+      expect(unresolveThread(rowOver(collapsed[0]!.el, { thread: { resolved: true, collapsed: true } }))).toBe(
+        'expanding',
+      )
+    })
+
+    it('carries exactly one unresolve form, and it is not counted as a resolve form', () => {
+      const d = loadFixture('resolvable')
+
+      expect(d.querySelectorAll('form[action$="/unresolve"]')).toHaveLength(1)
+      expect(d.querySelectorAll('form[action$="/resolve"]')).toHaveLength(8)
+    })
   })
 })
 

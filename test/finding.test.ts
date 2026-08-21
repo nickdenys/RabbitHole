@@ -26,7 +26,7 @@ const COUNTS = {
   'human-replies': { threads: 103, readable: 27, triple: 26, prompt: 27, permalink: 27, coderabbit: 27 },
   'pending-in-batch': { threads: 19, readable: 9, triple: 8, prompt: 8, permalink: 8, coderabbit: 8 },
   'no-coderabbit': { threads: 3, readable: 2, triple: 0, prompt: 0, permalink: 2, coderabbit: 0 },
-  'resolvable': { threads: 10, readable: 10, triple: 10, prompt: 10, permalink: 10, coderabbit: 10 },
+  'resolvable': { threads: 10, readable: 9, triple: 9, prompt: 9, permalink: 9, coderabbit: 9 },
 } as const
 
 const NAMES = Object.keys(COUNTS) as (keyof typeof COUNTS)[]

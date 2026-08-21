@@ -130,7 +130,7 @@ const COUNTS = {
   'human-replies': { total: 103, unresolved: 27, hidden: 17, unparsed: 0, notes: 8 },
   'pending-in-batch': { total: 19, unresolved: 9, hidden: 7, unparsed: 0, notes: 7 },
   'no-coderabbit': { total: 3, unresolved: 2, hidden: 0, unparsed: 0, notes: 0 },
-  'resolvable': { total: 10, unresolved: 10, hidden: 10, unparsed: 0, notes: 3 },
+  'resolvable': { total: 10, unresolved: 8, hidden: 9, unparsed: 0, notes: 3 },
 } as const
 
 const NAMES = fixtureNames()

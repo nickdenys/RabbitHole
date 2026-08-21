@@ -15,17 +15,39 @@ beforeAll(() => {
 })
 
 /**
- * A real element per row, because the actions reach into the page through it.
- * The resolve form is opt in: GitHub renders it only for a reader who can write
- * to the repository, so its absence is the common case.
+ * What GitHub rendered inside the thread, which is what every action reaches
+ * for.
+ *
+ *   'none'        no form at all: a reader who cannot write to the repository
+ *   'resolve'     an open thread with the resolve form
+ *   'unresolve'   a resolved thread, expanded, with the unresolve form
+ *   'collapsed'   a resolved thread nobody has expanded: a toggle and no form
+ *
+ * All four are states of one page, not of one reader. 'collapsed' is the one
+ * B4 turned up: the unresolve form does not exist until the thread is expanded,
+ * verified on a repository the reader can write to. See `unresolveThread`.
  */
-function threadEl(resolvable: boolean): Element {
+type ThreadShape = 'none' | 'resolve' | 'unresolve' | 'collapsed'
+
+const THREAD_MARKUP: Record<ThreadShape, string> = {
+  none: '',
+  resolve:
+    '<form action="/owner/repo/pull/1/threads/1/resolve" method="post">' +
+    '<button type="submit">Resolve conversation</button></form>',
+  unresolve:
+    '<button data-action="click:review-thread-collapsible#toggle" aria-expanded="true" type="button"></button>' +
+    '<form action="/owner/repo/pull/1/threads/1/unresolve" method="post">' +
+    '<button type="submit">Unresolve conversation</button></form>',
+  collapsed:
+    '<button data-action="click:review-thread-collapsible#toggle" aria-expanded="false" type="button"></button>',
+}
+
+/** A real element per row, because the actions reach into the page through it. */
+function threadEl(shape: ThreadShape): Element {
   const el = document.createElement('review-thread-collapsible')
-  if (resolvable) {
-    el.innerHTML =
-      '<form action="/owner/repo/pull/1/threads/1/resolve" method="post">' +
-      '<button type="submit">Resolve conversation</button></form>'
-    el.querySelector('form')?.addEventListener('submit', (event) => event.preventDefault())
+  el.innerHTML = THREAD_MARKUP[shape]
+  for (const form of el.querySelectorAll('form')) {
+    form.addEventListener('submit', (event) => event.preventDefault())
   }
   return el
 }
@@ -42,6 +64,8 @@ function row(over: {
   verdict?: HideVerdict
   /** Give the thread GitHub's resolve form, which most readers never see. */
   resolvable?: boolean
+  /** Or one of the other three shapes; overrides `resolvable` when given. */
+  shape?: ThreadShape
 } = {}): TriageRow {
   const authors: ThreadAuthors | null =
     over.authors === null
@@ -58,7 +82,7 @@ function row(over: {
 
   return {
     thread: {
-      el: threadEl(over.resolvable === true),
+      el: threadEl(over.shape ?? (over.resolvable === true ? 'resolve' : 'none')),
       timelineItem: null,
       id: '1',
       file: 'src/app.ts',
@@ -384,11 +408,91 @@ describe('the actions on a row', () => {
     expect(status(host)).toBeNull()
   })
 
-  it('drops the resolve button once GitHub calls the thread resolved', async () => {
-    const host = await open(stateOf([row({ thread: { resolved: true }, resolvable: true })]))
+  it('swaps resolve for unresolve once GitHub calls the thread resolved', async () => {
+    const host = await open(stateOf([row({ thread: { resolved: true }, shape: 'unresolve' })]))
 
     expect(host.querySelector('.action.resolve')).toBeNull()
+    expect(host.querySelector('.action.unresolve')?.textContent).toBe('Unresolve')
     expect(host.querySelector('.action.copy')).not.toBeNull()
+  })
+
+  /**
+   * The mirror of the resolve rule, and the same refusal to claim anything: the
+   * click is not a done state, so the row waits for a pass to read
+   * `data-resolved="false"` off the page and stays struck through until it does.
+   */
+  it('waits for the engine after an unresolve rather than calling itself open', async () => {
+    const host = await open(stateOf([row({ thread: { resolved: true }, shape: 'unresolve' })]))
+
+    await click(host, '.action.unresolve')
+
+    expect(status(host)).toContain('Unresolving')
+    expect(host.querySelector<HTMLButtonElement>('.action.unresolve')?.disabled).toBe(true)
+    expect(host.querySelector('.row')?.classList.contains('done')).toBe(true)
+  })
+
+  it('finishes when a pass reports the thread open again', async () => {
+    const before = row({ thread: { resolved: true }, shape: 'unresolve' })
+    const host = await open(stateOf([before]))
+    await click(host, '.action.unresolve')
+
+    render(
+      <App state={stateOf([{ ...before, thread: { ...before.thread, resolved: false } }])} />,
+      host,
+    )
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(status(host)).toBeNull()
+    expect(host.querySelector('.row')?.classList.contains('done')).toBe(false)
+    expect(host.querySelector('.action.resolve')).not.toBeNull()
+  })
+
+  /**
+   * B4's verify-first answer, as the reader meets it. GitHub renders no
+   * unresolve form on a collapsed thread, so the first press expands and the
+   * row says which of the two steps it just took.
+   */
+  it('expands a collapsed thread first, and says that is what it did', async () => {
+    const host = await open(
+      stateOf([row({ thread: { resolved: true, collapsed: true }, shape: 'collapsed' })]),
+    )
+
+    await click(host, '.action.unresolve')
+
+    expect(status(host)).toContain('Press again')
+    expect(host.querySelector<HTMLButtonElement>('.action.unresolve')?.disabled).toBe(false)
+    expect(host.querySelector('.row')?.classList.contains('done')).toBe(true)
+  })
+
+  it('says so when GitHub rendered no unresolve button, and claims nothing', async () => {
+    const host = await open(stateOf([row({ thread: { resolved: true }, shape: 'none' })]))
+
+    await click(host, '.action.unresolve')
+
+    expect(status(host)).toContain('No unresolve button')
+    expect(status(host)).toContain('needs write access')
+    expect(host.querySelector('.row')?.classList.contains('done')).toBe(true)
+  })
+
+  it('offers the unresolve click again when nothing confirms it', async () => {
+    vi.useFakeTimers()
+    try {
+      const host = mount(stateOf([row({ thread: { resolved: true }, shape: 'unresolve' })]))
+      host.querySelector<HTMLElement>('.handle')?.click()
+      await vi.advanceTimersByTimeAsync(0)
+
+      host.querySelector<HTMLElement>('.action.unresolve')?.click()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(status(host)).toContain('Unresolving')
+
+      await vi.advanceTimersByTimeAsync(5_000)
+
+      expect(status(host)).toContain('did not confirm')
+      expect(host.querySelector('.action.unresolve')?.textContent).toBe('Unresolve again')
+      expect(host.querySelector<HTMLButtonElement>('.action.unresolve')?.disabled).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   // GitHub renders the button for write access rather than for a session, so a
@@ -503,7 +607,7 @@ const EXPECTED: Record<string, { listed: number; open: number; unread: number }>
   'human-replies': { listed: 27, open: 27, unread: 76 },
   'pending-in-batch': { listed: 8, open: 8, unread: 10 },
   'no-coderabbit': { listed: 0, open: 0, unread: 1 },
-  resolvable: { listed: 10, open: 10, unread: 0 },
+  resolvable: { listed: 9, open: 8, unread: 1 },
 }
 
 describe.each(Object.entries(EXPECTED))('the drawer on %s', (name, expected) => {

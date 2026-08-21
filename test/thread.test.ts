@@ -13,7 +13,7 @@ const COUNTS = {
   'human-replies': { threads: 103, resolved: 76, outdated: 57, collapsed: 76, deferred: 76, resolveForms: 0 },
   'pending-in-batch': { threads: 19, resolved: 10, outdated: 11, collapsed: 10, deferred: 10, resolveForms: 0 },
   'no-coderabbit': { threads: 3, resolved: 1, outdated: 2, collapsed: 1, deferred: 1, resolveForms: 0 },
-  'resolvable': { threads: 10, resolved: 0, outdated: 0, collapsed: 0, deferred: 0, resolveForms: 10 },
+  'resolvable': { threads: 10, resolved: 2, outdated: 0, collapsed: 1, deferred: 1, resolveForms: 8 },
 } as const
 
 const NAMES = Object.keys(COUNTS) as (keyof typeof COUNTS)[]
@@ -119,9 +119,20 @@ describe('scanThreads, identity', () => {
     }
   })
 
+  /**
+   * The resolve form is the third and last source, so this strips the other
+   * two off every thread to reach it. Only the 8 open threads have that form:
+   * since B4 the fixture also holds a resolved thread that carries an
+   * `/unresolve` form instead, and a collapsed one that carries no form at all,
+   * and with the frame id gone neither can be identified. Both land on 'no-id',
+   * which is the honest answer and the one invariant 1 refuses to hide on.
+   */
   it('falls back to the resolve form action when nothing else is there', () => {
     const d = loadFixture('resolvable')
     for (const frame of d.querySelectorAll('turbo-frame')) frame.removeAttribute('id')
+    for (const el of d.querySelectorAll('[data-deferred-content-url]')) {
+      el.removeAttribute('data-deferred-content-url')
+    }
 
     const scan = scanThreads(d)
     const actions = [...d.querySelectorAll('form[action$="/resolve"]')].map((form) =>
@@ -129,7 +140,13 @@ describe('scanThreads, identity', () => {
     )
 
     expect(actions).toHaveLength(COUNTS['resolvable'].resolveForms)
-    expect(scan.map((t) => t.id).sort()).toEqual([...actions].sort())
+    expect(scan.filter((t) => t.id !== '').map((t) => t.id).sort()).toEqual([...actions].sort())
+
+    // The resolve form's action is a suffix match, and `/unresolve` must not
+    // satisfy it: the thread that carries one is identified by nothing here.
+    const unidentified = scan.filter((t) => t.id === '')
+    expect(unidentified).toHaveLength(scan.length - actions.length)
+    for (const thread of unidentified) expect(thread.problems).toContain('no-id')
   })
 
   it('reports no-id rather than throwing when every source is gone', () => {

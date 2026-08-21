@@ -32,8 +32,8 @@ const COUNTS = {
     allCodeRabbit: 0, rootCodeRabbit: 0, withPending: 0,
   },
   'resolvable': {
-    threads: 10, attributed: 10, comments: 10, fromCodeRabbit: 10,
-    allCodeRabbit: 10, rootCodeRabbit: 10, withPending: 0,
+    threads: 10, attributed: 9, comments: 9, fromCodeRabbit: 9,
+    allCodeRabbit: 9, rootCodeRabbit: 9, withPending: 0,
   },
 } as const
 

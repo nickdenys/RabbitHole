@@ -21,6 +21,40 @@ import type { Finding } from '../types'
 const RESOLVE_BUTTON = 'form[action$="/resolve"] button'
 
 /**
+ * GitHub's own unresolve button, the exact mirror of the resolve one.
+ *
+ * **Verified 21 August 2026** on `nickdenys/optios-booking#1`, and captured in
+ * `resolvable.html`: the form is
+ * `form.js-resolvable-timeline-thread-form[data-turbo="false"]`, its action is
+ * `/owner/repo/pull/1/threads/2596049536/unresolve`, and its one submit button
+ * reads `Unresolve conversation`. Same form class, same handler, same reason
+ * for clicking the button rather than submitting the form.
+ *
+ * **The suffix match is what keeps the two apart, and it is not an accident.**
+ * `form[action$="/resolve"]` does not match an unresolve action, because the
+ * last eight characters of `.../unresolve` are `nresolve` and not `/resolve`.
+ * The leading slash is doing real work: `action$="resolve"` would match both
+ * and `resolveThread` would silently unresolve threads. Asserted in the tests.
+ */
+const UNRESOLVE_BUTTON = 'form[action$="/unresolve"] button'
+
+/**
+ * GitHub's chevron, which expands a collapsed thread and fetches its comments.
+ *
+ * **The unresolve form does not exist while the thread is collapsed.** Verified
+ * 21 August 2026 on a repository the reader can write to, which is the only
+ * place the question can be asked: a resolved, collapsed thread carries no
+ * `form` at all, not a disabled one and not a hidden one. Expanding it fetches
+ * the partial, and the unresolve form arrives with it.
+ *
+ * So unresolve is a two step action on a collapsed thread, and `unresolveThread`
+ * says which step it just took rather than pretending the first one was the
+ * whole thing. The attribute is Catalyst's own binding, so clicking the button
+ * runs GitHub's expand rather than anything of ours.
+ */
+const EXPAND_TOGGLE = 'button[data-action="click:review-thread-collapsible#toggle"]'
+
+/**
  * The findings of threads resolved in this session, keyed by thread id.
  *
  * A resolved thread collapses and loses its comments, so the next pass reads it
@@ -118,4 +152,56 @@ export function resolveThread(row: TriageRow): boolean {
 
   button.click()
   return true
+}
+
+/**
+ * What one press of Unresolve actually did.
+ *
+ *   'clicked'      GitHub's unresolve button was clicked; wait for a pass
+ *   'expanding'    the thread was collapsed, so it was expanded instead and the
+ *                  form is on its way; press again when it arrives
+ *   'unavailable'  the thread is expanded and still has no button, which is
+ *                  what a reader without write access sees
+ */
+export type UnresolveOutcome = 'clicked' | 'expanding' | 'unavailable'
+
+/**
+ * Click GitHub's unresolve button for this thread, expanding it first if that
+ * is what it takes to have one.
+ *
+ * Same contract as `resolveThread`: 'clicked' means the click was delivered,
+ * never that the thread is open again. `data-resolved` is the only done state,
+ * read fresh off the page by the next pass.
+ *
+ * **The two step case is not hidden from the reader.** A collapsed thread has
+ * no form to click, so the first press expands it and says so, and the second
+ * one unresolves. Doing both behind one press would mean waiting on a network
+ * fetch inside a click handler and guessing when it landed, and a guess that
+ * came back wrong would look exactly like a button that does nothing.
+ *
+ * **The session cache is deliberately left alone.** It holds what a thread said
+ * before it was resolved here, and dropping it on the click would be trusting
+ * an unresolve that has not happened yet: if GitHub refused, the row would fall
+ * back to unreadable and vanish from the list, which is the failure the cache
+ * exists to prevent. Once the page says the thread is open again its comments
+ * are back in the DOM, the pass parses a real finding, and `described` prefers
+ * that over the cache anyway, so the stale entry does nothing until navigation
+ * clears it.
+ */
+export function unresolveThread(row: TriageRow): UnresolveOutcome {
+  const el = row.thread.el
+
+  const button = el.querySelector<HTMLElement>(UNRESOLVE_BUTTON)
+  if (button !== null) {
+    button.click()
+    return 'clicked'
+  }
+
+  const toggle = el.querySelector<HTMLElement>(EXPAND_TOGGLE)
+  if (toggle !== null && toggle.getAttribute('aria-expanded') !== 'true') {
+    toggle.click()
+    return 'expanding'
+  }
+
+  return 'unavailable'
 }

@@ -211,7 +211,7 @@ const APPLIED = {
   'human-replies': { targets: 25, safe: 12, aggressive: 22 },
   'pending-in-batch': { targets: 14, safe: 13, aggressive: 13 },
   'no-coderabbit': { targets: 0, safe: 0, aggressive: 0 },
-  'resolvable': { targets: 13, safe: 3, aggressive: 3 },
+  'resolvable': { targets: 12, safe: 8, aggressive: 8 },
 } as const
 
 // Parsed once and shared, as in the other fixture tests: human-replies.html is
