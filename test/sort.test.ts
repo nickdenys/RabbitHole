@@ -1,21 +1,38 @@
 import { describe, expect, it } from 'vitest'
 import type { TriageRow } from '../src/engine'
-import { sortRows } from '../src/panel/sort'
+import { groupRows, sortRows, SORT_LABELS, type SortAxis } from '../src/panel/sort'
 import type { Severity } from '../src/types'
 
+/** The state and description fields the three B6 axes read. */
+interface RowOver {
+  resolved?: boolean
+  outdated?: boolean
+  category?: string | null
+  effort?: string | null
+}
+
 /**
- * A row reduced to the two things sorting reads, plus an `id` to assert the
- * resulting order by. Everything else is what the drawer's own tests cover.
+ * A row reduced to what sorting reads, plus an `id` to assert the resulting
+ * order by. Everything else is what the drawer's own tests cover.
+ *
+ * A null severity means no finding at all, which is the collapsed thread the
+ * fetch has not answered for: it takes the category and the effort with it, so
+ * `over` only reaches the finding when there is one.
  */
-function row(id: string, severity: Severity | null, file: string | null): TriageRow {
+function row(
+  id: string,
+  severity: Severity | null,
+  file: string | null,
+  over: RowOver = {},
+): TriageRow {
   return {
     thread: {
       el: null as unknown as Element,
       timelineItem: null,
       id,
       file,
-      resolved: false,
-      outdated: false,
+      resolved: over.resolved ?? false,
+      outdated: over.outdated ?? false,
       collapsed: false,
       deferredUrl: null,
       authors: null,
@@ -26,9 +43,9 @@ function row(id: string, severity: Severity | null, file: string | null): Triage
         ? null
         : {
             title: id,
-            category: 'Potential issue',
+            category: over.category === undefined ? 'Potential issue' : over.category,
             severity,
-            effort: '~10 minutes',
+            effort: over.effort === undefined ? '~10 minutes' : over.effort,
             aiPrompt: null,
             permalink: null,
           },
@@ -139,5 +156,230 @@ describe('sortRows, both axes', () => {
     const rows = [row('a', 'minor', 'a.ts')]
 
     expect(sortRows(rows, 'severity')).not.toBe(rows)
+  })
+})
+
+describe('sortRows, by state', () => {
+  it('orders open, outdated, resolved', () => {
+    const rows = [
+      row('resolved', 'minor', 'a.ts', { resolved: true }),
+      row('outdated', 'minor', 'a.ts', { outdated: true }),
+      row('open', 'minor', 'a.ts'),
+    ]
+
+    expect(ids(sortRows(rows, 'state'))).toEqual(['open', 'outdated', 'resolved'])
+  })
+
+  it('calls a resolved thread resolved even when it is also outdated', () => {
+    const rows = [
+      row('both', 'minor', 'a.ts', { resolved: true, outdated: true }),
+      row('outdated', 'minor', 'a.ts', { outdated: true }),
+    ]
+
+    expect(ids(sortRows(rows, 'state'))).toEqual(['outdated', 'both'])
+  })
+
+  it('breaks a tie on severity, worst first', () => {
+    const rows = [
+      row('open-minor', 'minor', 'a.ts'),
+      row('done-critical', 'critical', 'a.ts', { resolved: true }),
+      row('open-critical', 'critical', 'a.ts'),
+    ]
+
+    expect(ids(sortRows(rows, 'state'))).toEqual(['open-critical', 'open-minor', 'done-critical'])
+  })
+
+  it('sorts a thread with no finding, because state is read off the thread', () => {
+    const rows = [row('unread', null, null, { resolved: true }), row('open', null, null)]
+
+    expect(ids(sortRows(rows, 'state'))).toEqual(['open', 'unread'])
+  })
+})
+
+describe('sortRows, by category', () => {
+  it('orders by the category word', () => {
+    const rows = [
+      row('security', 'minor', 'a.ts', { category: 'Security & Privacy' }),
+      row('correctness', 'minor', 'a.ts', { category: 'Functional Correctness' }),
+      row('maintainability', 'minor', 'a.ts', { category: 'Maintainability & Code Quality' }),
+    ]
+
+    expect(ids(sortRows(rows, 'category'))).toEqual(['correctness', 'maintainability', 'security'])
+  })
+
+  it('breaks a tie on severity, worst first', () => {
+    const rows = [
+      row('a-minor', 'minor', 'z.ts', { category: 'A' }),
+      row('a-critical', 'critical', 'z.ts', { category: 'A' }),
+    ]
+
+    expect(ids(sortRows(rows, 'category'))).toEqual(['a-critical', 'a-minor'])
+  })
+
+  it('puts a missing category last and never drops it', () => {
+    const rows = [
+      row('none', 'critical', 'a.ts', { category: null }),
+      row('no-finding', null, 'a.ts'),
+      row('stated', 'trivial', 'a.ts', { category: 'Stability & Availability' }),
+    ]
+
+    const sorted = sortRows(rows, 'category')
+
+    expect(ids(sorted)).toEqual(['stated', 'none', 'no-finding'])
+    expect(sorted).toHaveLength(rows.length)
+  })
+})
+
+describe('sortRows, by effort', () => {
+  it('orders CodeRabbit s three words cheapest return first', () => {
+    const rows = [
+      row('low', 'minor', 'a.ts', { effort: 'Low value' }),
+      row('heavy', 'minor', 'a.ts', { effort: 'Heavy lift' }),
+      row('quick', 'minor', 'a.ts', { effort: 'Quick win' }),
+    ]
+
+    expect(ids(sortRows(rows, 'effort'))).toEqual(['quick', 'heavy', 'low'])
+  })
+
+  it('matches the word however it is cased', () => {
+    const rows = [
+      row('shouty', 'minor', 'a.ts', { effort: 'LOW VALUE' }),
+      row('quiet', 'minor', 'a.ts', { effort: 'quick win' }),
+    ]
+
+    expect(ids(sortRows(rows, 'effort'))).toEqual(['quiet', 'shouty'])
+  })
+
+  it('sorts a word it does not know after the three, alphabetically', () => {
+    const rows = [
+      row('zeta', 'minor', 'a.ts', { effort: 'Zeta effort' }),
+      row('none', 'minor', 'a.ts', { effort: null }),
+      row('alpha', 'minor', 'a.ts', { effort: 'Alpha effort' }),
+      row('low', 'minor', 'a.ts', { effort: 'Low value' }),
+    ]
+
+    const sorted = sortRows(rows, 'effort')
+
+    expect(ids(sorted)).toEqual(['low', 'alpha', 'zeta', 'none'])
+    expect(sorted).toHaveLength(rows.length)
+  })
+
+  it('breaks a tie on severity, worst first', () => {
+    const rows = [
+      row('quick-minor', 'minor', 'a.ts', { effort: 'Quick win' }),
+      row('quick-major', 'major', 'a.ts', { effort: 'Quick win' }),
+    ]
+
+    expect(ids(sortRows(rows, 'effort'))).toEqual(['quick-major', 'quick-minor'])
+  })
+})
+
+describe('sortRows, every axis', () => {
+  const axes = Object.keys(SORT_LABELS) as SortAxis[]
+
+  it('offers the five the design settled on, severity first', () => {
+    expect(axes).toEqual(['severity', 'file', 'state', 'category', 'effort'])
+  })
+
+  it.each(axes)('sorts an empty list to an empty list on %s', (axis) => {
+    expect(sortRows([], axis)).toEqual([])
+  })
+
+  it.each(axes)('keeps every row on %s', (axis) => {
+    const rows = [
+      row('described', 'major', 'a.ts', { category: 'B', effort: 'Quick win' }),
+      row('bare', null, null),
+      row('done', 'trivial', 'z.ts', { resolved: true, category: null, effort: null }),
+    ]
+
+    expect(ids(sortRows(rows, axis)).sort()).toEqual(['bare', 'described', 'done'])
+  })
+
+  it.each(axes)('does not mutate its input on %s', (axis) => {
+    const rows = [row('b', 'minor', 'b.ts'), row('a', 'critical', 'a.ts')]
+    const before = ids(rows)
+
+    sortRows(rows, axis)
+
+    expect(ids(rows)).toEqual(before)
+  })
+})
+
+describe('groupRows', () => {
+  const labels = (groups: { label: string | null }[]): (string | null)[] =>
+    groups.map((group) => group.label)
+
+  it('leaves severity, file and effort in one unlabelled group', () => {
+    const rows = [row('a', 'minor', 'a.ts'), row('b', 'major', 'b.ts')]
+
+    for (const axis of ['severity', 'file', 'effort'] as const) {
+      const groups = groupRows(sortRows(rows, axis), axis)
+
+      expect(labels(groups)).toEqual([null])
+      expect(ids(groups[0].rows)).toHaveLength(2)
+    }
+  })
+
+  it('heads each category with its own word', () => {
+    const rows = [
+      row('sec', 'minor', 'a.ts', { category: 'Security & Privacy' }),
+      row('fix-1', 'minor', 'a.ts', { category: 'Functional Correctness' }),
+      row('fix-2', 'major', 'a.ts', { category: 'Functional Correctness' }),
+    ]
+
+    const groups = groupRows(sortRows(rows, 'category'), 'category')
+
+    expect(labels(groups)).toEqual(['Functional Correctness', 'Security & Privacy'])
+    expect(ids(groups[0].rows)).toEqual(['fix-2', 'fix-1'])
+  })
+
+  it('heads a missing category as the gap it is', () => {
+    const rows = [row('none', 'minor', 'a.ts', { category: null })]
+
+    expect(labels(groupRows(rows, 'category'))).toEqual(['No category stated'])
+  })
+
+  it('heads the three states', () => {
+    const rows = [
+      row('open', 'minor', 'a.ts'),
+      row('outdated', 'minor', 'a.ts', { outdated: true }),
+      row('resolved', 'minor', 'a.ts', { resolved: true }),
+    ]
+
+    expect(labels(groupRows(sortRows(rows, 'state'), 'state'))).toEqual([
+      'Open',
+      'Outdated',
+      'Resolved',
+    ])
+  })
+
+  it('groups nothing into nothing', () => {
+    expect(groupRows([], 'category')).toEqual([])
+    expect(groupRows([], 'severity')).toEqual([])
+  })
+
+  it('keeps every row exactly once', () => {
+    const rows = [
+      row('a', 'minor', 'a.ts', { category: 'A' }),
+      row('b', 'minor', 'a.ts', { category: 'B' }),
+      row('c', null, null),
+    ]
+
+    const groups = groupRows(sortRows(rows, 'category'), 'category')
+
+    expect(groups.flatMap((group) => ids(group.rows)).sort()).toEqual(['a', 'b', 'c'])
+  })
+
+  it('does not reorder what it is given', () => {
+    // A chunker, never a sorter: given an unsorted list it makes two runs of the
+    // same label rather than quietly merging them, which is what keeps the
+    // ordering decision in exactly one place.
+    const rows = [
+      row('a', 'minor', 'x.ts', { category: 'A' }),
+      row('b', 'minor', 'x.ts', { category: 'B' }),
+      row('a-again', 'minor', 'x.ts', { category: 'A' }),
+    ]
+
+    expect(labels(groupRows(rows, 'category'))).toEqual(['A', 'B', 'A'])
   })
 })

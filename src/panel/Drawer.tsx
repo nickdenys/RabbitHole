@@ -2,7 +2,7 @@ import { useLayoutEffect, useState } from 'preact/hooks'
 import type { TriageRow, TriageState } from '../engine'
 import { Row } from './Row'
 import { emptyState, unreadCount, type EmptyState } from './rows'
-import { SORT_LABELS, sortRows, type SortAxis } from './sort'
+import { groupRows, SORT_LABELS, sortRows, type SortAxis } from './sort'
 
 interface DrawerProps {
   state: TriageState
@@ -40,7 +40,7 @@ export function Drawer({ state, listed, onClose }: DrawerProps) {
   const empty = emptyState(state, listed)
   const open = listed.filter((row) => !row.thread.resolved).length
   const unread = unreadCount(state)
-  const sorted = sortRows(listed, axis)
+  const groups = groupRows(sortRows(listed, axis), axis)
 
   return (
     <aside class="drawer" aria-label="CodeRabbit Triage">
@@ -69,13 +69,16 @@ export function Drawer({ state, listed, onClose }: DrawerProps) {
 
       {listed.length > 0 && <SortPicker axis={axis} onChange={setAxis} />}
 
-      {sorted.length > 0 && (
-        <ul class="rows">
-          {sorted.map((row) => (
-            <Row row={row} key={rowKey(row)} />
-          ))}
-        </ul>
-      )}
+      {groups.map((group) => (
+        <section class="group" key={group.label ?? 'all'}>
+          {group.label !== null && <h2 class="group-head">{group.label}</h2>}
+          <ul class="rows">
+            {group.rows.map((row) => (
+              <Row row={row} key={rowKey(row)} />
+            ))}
+          </ul>
+        </section>
+      ))}
 
       {empty !== 'unsupported' && unread > 0 && (
         <p class="notice">
@@ -88,9 +91,8 @@ export function Drawer({ state, listed, onClose }: DrawerProps) {
 }
 
 /**
- * The axis picker. A select rather than a pair of buttons because B6 adds three
- * more axes to the same control, and a five item toggle row does not fit a
- * 380px drawer.
+ * The axis picker. A select rather than a row of buttons because B6 brought the
+ * control to five axes, and five toggles do not fit a 380px drawer.
  */
 function SortPicker({ axis, onChange }: { axis: SortAxis; onChange: (axis: SortAxis) => void }) {
   return (

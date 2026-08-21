@@ -149,6 +149,23 @@
   cursor: pointer;
 }
 
+/* Sticky so a long run of one category or one state keeps saying which it is
+ * while the reader scrolls it, rather than only at the top. */
+.group-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .rows {
   margin: 0;
   padding: 0;

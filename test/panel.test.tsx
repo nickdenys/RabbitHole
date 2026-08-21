@@ -443,6 +443,118 @@ describe('the panel', () => {
   })
 })
 
+/**
+ * The picker and the headings, which is B6 as the reader meets it. What each
+ * axis orders by is `sort.test.ts`; this is only that the drawer offers all
+ * five and puts a heading over the two that group.
+ */
+describe('the sort picker', () => {
+  /** Choose an axis the way a reader does, and let preact settle the render. */
+  async function sortBy(host: HTMLElement, axis: string): Promise<void> {
+    const select = host.querySelector<HTMLSelectElement>('.sort-select')
+    if (select === null) throw new Error('The drawer drew no sort picker')
+
+    select.value = axis
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+
+  const headings = (host: HTMLElement): string[] =>
+    [...host.querySelectorAll('.group-head')].map((h) => h.textContent ?? '')
+
+  const titles = (host: HTMLElement): string[] =>
+    [...host.querySelectorAll('.row-title')].map((p) => p.textContent ?? '')
+
+  /** Three findings that differ on every axis the picker offers. */
+  function mixed(): TriageRow[] {
+    return [
+      row({
+        thread: { id: '1', file: 'z.ts' },
+        finding: { title: 'trivial', severity: 'trivial', category: 'Security & Privacy', effort: 'Heavy lift' },
+      }),
+      row({
+        thread: { id: '2', file: 'a.ts', resolved: true },
+        finding: { title: 'resolved', severity: 'major', category: 'Functional Correctness', effort: 'Quick win' },
+      }),
+      row({
+        thread: { id: '3', file: 'm.ts' },
+        finding: { title: 'critical', severity: 'critical', category: 'Functional Correctness', effort: 'Low value' },
+      }),
+    ]
+  }
+
+  it('offers all five axes, severity first', async () => {
+    const host = mount(stateOf([row()]))
+    await click(host, '.handle')
+
+    const options = [...host.querySelectorAll('option')]
+    expect(options.map((o) => o.getAttribute('value'))).toEqual([
+      'severity',
+      'file',
+      'state',
+      'category',
+      'effort',
+    ])
+    expect(options.map((o) => o.textContent)).toEqual([
+      'Severity',
+      'File',
+      'State',
+      'Category',
+      'Effort',
+    ])
+  })
+
+  it('opens on severity, worst first and unheaded', async () => {
+    const host = mount(stateOf(mixed()))
+    await click(host, '.handle')
+
+    expect(titles(host)).toEqual(['critical', 'resolved', 'trivial'])
+    expect(headings(host)).toEqual([])
+  })
+
+  it('reorders when the reader picks another axis', async () => {
+    const host = mount(stateOf(mixed()))
+    await click(host, '.handle')
+    await sortBy(host, 'effort')
+
+    expect(titles(host)).toEqual(['resolved', 'trivial', 'critical'])
+    expect(headings(host)).toEqual([])
+  })
+
+  it('heads each category, because a flat list sorted by category reads as noise', async () => {
+    const host = mount(stateOf(mixed()))
+    await click(host, '.handle')
+    await sortBy(host, 'category')
+
+    expect(headings(host)).toEqual(['Functional Correctness', 'Security & Privacy'])
+    expect(titles(host)).toEqual(['critical', 'resolved', 'trivial'])
+  })
+
+  it('heads the states, and lists every row under one of them', async () => {
+    const host = mount(stateOf(mixed()))
+    await click(host, '.handle')
+    await sortBy(host, 'state')
+
+    expect(headings(host)).toEqual(['Open', 'Resolved'])
+    expect(titles(host)).toEqual(['critical', 'trivial', 'resolved'])
+  })
+
+  it('says so rather than leaving a heading blank when the category is missing', async () => {
+    const host = mount(stateOf([row({ finding: { category: null, severity: null, effort: null } })]))
+    await click(host, '.handle')
+    await sortBy(host, 'category')
+
+    expect(headings(host)).toEqual(['No category stated'])
+  })
+
+  it('draws no picker over a page with nothing to sort', async () => {
+    const host = mount(stateOf([]))
+    await click(host, '.handle')
+
+    expect(host.querySelector('.sort-select')).toBeNull()
+  })
+})
+
 describe('the actions on a row', () => {
   /** Open the drawer and hand back the one row in it. */
   async function open(state: TriageState): Promise<HTMLElement> {
