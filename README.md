@@ -35,7 +35,7 @@ Everything reads the rendered page. No API token, no backend, no permission beyo
 
 **Aggressive mode hides all CodeRabbit rooted threads.** It is an explicit toggle, for teams that never discuss findings inline.
 
-The walkthrough comment and the "Actionable comments posted: N" summaries are hidden too, but read first: their total is compared against the threads found, and a mismatch warns you. The Conversation tab is known to occasionally drop a thread. The check only warns, it never blocks.
+The walkthrough comment and the "Actionable comments posted: N" summaries are hidden too, but read first: their total is compared against the threads found, and the panel warns when the page holds fewer than CodeRabbit says it posted. GitHub renders a long conversation in pieces, so a big pull request opens with a handful of its threads in the page and a reassuringly small number on the handle. The check only warns, it never blocks and never hides less.
 
 ## Roadmap
 
@@ -52,8 +52,8 @@ The walkthrough comment and the "Actionable comments posted: N" summaries are hi
 **v0.2 adds the network half**, which is everything that needs GitHub's deferred thread endpoint or a stored preference.
 
 * Fetch resolved threads on panel open, so they list as findings rather than as a count (done)
-* Unresolve, through GitHub's own button
-* The count check: compare CodeRabbit's own "Actionable comments posted: N" against the threads found, and warn on a mismatch
+* Unresolve, through GitHub's own button (done)
+* The count check: compare CodeRabbit's own "Actionable comments posted: N" against the threads found, and warn when the page holds fewer (done)
 * Sort by state, category and effort, with grouped headers where a flat list would read as noise
 * The aggressive hide toggle, and the preferences that hold it
 

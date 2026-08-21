@@ -87,9 +87,24 @@ function isUnread(row: TriageRow): boolean {
   return sessionFinding(row.thread.id) === undefined
 }
 
-/** Null when there is a list to draw. */
+/**
+ * Null when there is a list to draw, and null as well when the count check is
+ * warning.
+ *
+ * Both remaining states are claims about completeness. "No CodeRabbit findings"
+ * says the page was read in full, and "nothing left to do" says every finding
+ * on it is closed, and the check firing is CodeRabbit's own total saying neither
+ * is true. Drawing one of them under the warning would put the reassuring
+ * sentence and the correction in the same drawer, which is invariant 3's
+ * failure in miniature: the reader believes the larger text.
+ *
+ * The warning notice says what is wrong and how many are missing, so nothing is
+ * lost by staying quiet here. `unsupported` still wins, because a build that
+ * could not be read has no counts to compare in the first place.
+ */
 export function emptyState(state: TriageState, listed: TriageRow[]): EmptyState | null {
   if (state.kind !== 'classic') return 'unsupported'
+  if (state.check.missing > 0) return null
   if (listed.length === 0 && unreadCount(state) === 0) return 'no-findings'
   if (listed.every((row) => row.thread.resolved)) return 'all-done'
   return null

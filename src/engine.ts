@@ -1,3 +1,4 @@
+import { countCheck, NO_CHECK, type CountCheck } from './count'
 import { detectPage, pullRequestKey } from './detect'
 import { parseThreadFragment, type FetchedThread } from './fetch/parse'
 import { fetchThreadHtml } from './fetch/threads'
@@ -46,6 +47,15 @@ export interface TriageState {
   notes: CodeRabbitNote[]
   hidden: Set<string>
   counts: { total: number; unresolved: number; hidden: number; unparsed: number }
+  /**
+   * CodeRabbit's own total against the threads in the page, which is the one
+   * number in this state that is about GitHub rather than about the review.
+   *
+   * It lives beside `counts` rather than in it because it is not a count of
+   * anything the extension found: `counts` describes what was read, and this
+   * describes what was not. See `countCheck`.
+   */
+  check: CountCheck
   /**
    * Ask for the resolved threads to be read back off GitHub, which is the
    * deferred fetch and the only network this extension does.
@@ -296,7 +306,16 @@ function runPass(
   // reveal matters because Turbo can navigate from a page we did read.
   if (kind !== 'classic') {
     revealAll(doc)
-    return { kind, threads: [], rows: [], notes: [], hidden: new Set(), counts: NO_COUNTS, readResolved }
+    return {
+      kind,
+      threads: [],
+      rows: [],
+      notes: [],
+      hidden: new Set(),
+      counts: NO_COUNTS,
+      check: NO_CHECK,
+      readResolved,
+    }
   }
 
   const notes = scanNotes(doc)
@@ -334,6 +353,7 @@ function runPass(
     rows,
     notes,
     hidden: new Set(hideable.map((thread) => thread.id)),
+    check: countCheck(notes, rows),
     counts: {
       total: threads.length,
       unresolved: threads.filter((thread) => !thread.resolved).length,

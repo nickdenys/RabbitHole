@@ -51,6 +51,14 @@ export function Drawer({ state, listed, onClose }: DrawerProps) {
         </button>
       </header>
 
+      {state.check.missing > 0 && (
+        <p class="notice warn">
+          CodeRabbit posted {state.check.claimed} findings and {state.check.found} are in this page.
+          GitHub renders a long conversation in pieces, so load the rest of it before trusting this
+          list.
+        </p>
+      )}
+
       {state.counts.unparsed > 0 && (
         <p class="notice warn">
           {count(state.counts.unparsed, 'thread')} could not be read, so {state.counts.unparsed === 1 ? 'it is' : 'they are'} still in the timeline.

@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { NO_CHECK } from '../src/count'
 import type { TriageState } from '../src/engine'
 import { updatePanel } from '../src/panel/mount'
 import type { PageKind } from '../src/types'
@@ -26,6 +27,7 @@ function state(kind: PageKind): TriageState {
     notes: [],
     hidden: new Set(),
     counts: { total: 0, unresolved: 0, hidden: 0, unparsed: 0 },
+    check: NO_CHECK,
     readResolved: () => {},
   }
 }

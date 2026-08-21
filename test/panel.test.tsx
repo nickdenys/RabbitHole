@@ -1,5 +1,6 @@
 import { render } from 'preact'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { NO_CHECK, type CountCheck } from '../src/count'
 import { startEngine, type TriageRow, type TriageState } from '../src/engine'
 import type { HideVerdict } from '../src/hide/policy'
 import { forgetSessionFindings } from '../src/panel/actions'
@@ -115,6 +116,13 @@ const kept = (reason: Exclude<HideVerdict, { hide: true }>['reason']): HideVerdi
   reason,
 })
 
+/** A check that is warning: CodeRabbit said `claimed` and the page holds `found`. */
+const short = (claimed: number, found: number): CountCheck => ({
+  claimed,
+  found,
+  missing: Math.max(0, claimed - found),
+})
+
 function stateOf(rows: TriageRow[], over: Partial<TriageState> = {}): TriageState {
   const threads = rows.map((r) => r.thread)
   const hidden = rows.filter((r) => r.verdict.hide)
@@ -125,6 +133,10 @@ function stateOf(rows: TriageRow[], over: Partial<TriageState> = {}): TriageStat
     rows,
     notes: [],
     hidden: new Set(hidden.map((r) => r.thread.id)),
+    // Quiet by default: a page with no summary makes no claim, so every case
+    // below that does not name a check is a page the check has nothing to say
+    // about. The cases that want it firing pass their own.
+    check: NO_CHECK,
     counts: {
       total: threads.length,
       unresolved: threads.filter((t) => !t.resolved).length,
@@ -297,6 +309,50 @@ describe('the panel', () => {
 
     await click(host, '.handle')
     expect(host.querySelector('.notice.warn')?.textContent).toContain('1 thread could not be read')
+  })
+
+  it('warns on the handle when the page holds fewer findings than CodeRabbit posted', async () => {
+    const host = mount(stateOf([row()], { check: short(27, 3) }))
+
+    expect(host.querySelector('.handle')?.classList.contains('warn')).toBe(true)
+    expect(host.querySelector('.handle')?.getAttribute('title')).toContain('24 not in the page')
+  })
+
+  it('names both numbers at the top of the drawer', async () => {
+    const host = mount(stateOf([row()], { check: short(27, 3) }))
+    await click(host, '.handle')
+
+    const notice = host.querySelector('.notice.warn')
+    expect(notice?.textContent).toContain('CodeRabbit posted 27 findings')
+    expect(notice?.textContent).toContain('3 are in this page')
+  })
+
+  it('does not warn when the page holds more findings than the total', async () => {
+    const host = mount(stateOf([row()], { check: { claimed: 102, found: 103, missing: 0 } }))
+
+    expect(host.querySelector('.handle')?.classList.contains('warn')).toBe(false)
+    await click(host, '.handle')
+    expect(host.querySelector('.notice.warn')).toBeNull()
+  })
+
+  /**
+   * The reassuring sentence and its correction must never share a drawer. With
+   * the check warning there is nothing on the page to conclude anything from,
+   * so the empty state says nothing and the warning speaks alone.
+   */
+  it('does not claim "no findings" over a page that is not all here', async () => {
+    const host = mount(stateOf([], { check: short(27, 0) }))
+    await click(host, '.handle')
+
+    expect(host.querySelector('.empty-title')).toBeNull()
+    expect(host.querySelector('.notice.warn')?.textContent).toContain('CodeRabbit posted 27 findings')
+  })
+
+  it('does not claim "nothing left to do" over one either', async () => {
+    const host = mount(stateOf([row({ thread: { resolved: true } })], { check: short(27, 1) }))
+    await click(host, '.handle')
+
+    expect(host.querySelector('.empty-title')).toBeNull()
   })
 
   it('draws a row per finding, with its severity, title, file and badges', async () => {

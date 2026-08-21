@@ -20,7 +20,8 @@ export function App({ state }: AppProps) {
   const readable = state.kind === 'classic'
   const listed = readable ? listedRows(state) : []
   const todo = listed.filter((row) => !row.thread.resolved).length
-  const warn = !readable || state.counts.unparsed > 0
+  const missing = readable ? state.check.missing : 0
+  const warn = !readable || state.counts.unparsed > 0 || missing > 0
 
   return (
     <div class={open ? 'panel open' : 'panel'}>
@@ -28,7 +29,7 @@ export function App({ state }: AppProps) {
         class={warn ? 'handle warn' : 'handle'}
         type="button"
         onClick={() => setOpen(!open)}
-        title={handleTitle(readable, todo, state.counts.unparsed)}
+        title={handleTitle(readable, todo, state.counts.unparsed, missing)}
         aria-expanded={open}
       >
         {readable ? `CR ${todo}` : 'CR ⚠'}
@@ -44,10 +45,19 @@ export function App({ state }: AppProps) {
  * The count is the listed worklist rather than `counts.unresolved`, which
  * includes human threads the drawer never lists. A handle that says 27 over a
  * list of 3 is a handle nobody trusts.
+ *
+ * The missing count is the reverse of that problem and the reason B5 exists: a
+ * handle saying 3 over a page GitHub has only half rendered is also a handle
+ * nobody should trust, and it is the small reassuring number that reads as good
+ * news. It comes first in the title because it is the one that says the rest of
+ * the title is incomplete.
  */
-function handleTitle(readable: boolean, todo: number, unparsed: number): string {
+function handleTitle(readable: boolean, todo: number, unparsed: number, missing: number): string {
   if (!readable) return "CodeRabbit Triage: this GitHub build isn't supported yet. Nothing is hidden."
 
-  const base = `CodeRabbit Triage: ${todo} to go`
-  return unparsed > 0 ? `${base}, ${unparsed} unreadable` : base
+  const parts = [`${todo} to go`]
+  if (missing > 0) parts.push(`${missing} not in the page`)
+  if (unparsed > 0) parts.push(`${unparsed} unreadable`)
+
+  return `CodeRabbit Triage: ${parts.join(', ')}`
 }
