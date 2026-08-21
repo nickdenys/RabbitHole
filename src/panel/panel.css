@@ -303,3 +303,37 @@
   background: transparent;
   box-shadow: inset 0 0 0 1px var(--muted);
 }
+
+/* Last in the drawer and shut by default, because it is read once and the
+ * worklist is read every time. `margin-top: auto` puts it at the bottom of the
+ * column rather than under the last row, so a short list does not leave it
+ * floating in the middle. */
+.settings {
+  margin-top: auto;
+  border-top: 1px solid var(--line);
+}
+
+.settings-head {
+  padding: 8px 14px;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.setting {
+  display: flex;
+  gap: 8px;
+  padding: 8px 14px 8px 16px;
+  cursor: pointer;
+}
+
+.setting-label {
+  display: block;
+  font-weight: 500;
+}
+
+.setting-note {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+}

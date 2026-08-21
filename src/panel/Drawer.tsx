@@ -2,6 +2,7 @@ import { useLayoutEffect, useState } from 'preact/hooks'
 import type { TriageRow, TriageState } from '../engine'
 import { Row } from './Row'
 import { emptyState, unreadCount, type EmptyState } from './rows'
+import { Settings } from './Settings'
 import { groupRows, SORT_LABELS, sortRows, type SortAxis } from './sort'
 
 interface DrawerProps {
@@ -20,7 +21,17 @@ export function Drawer({ state, listed, onClose }: DrawerProps) {
   // drawer does. A pass runs on every mutation and hands down a new `listed`,
   // and preact keeps this across those renders, so a churning page does not
   // reshuffle the list under the reader.
-  const [axis, setAxis] = useState<SortAxis>('severity')
+  //
+  // The remembered axis is the initial value and never a controlled one: the
+  // engine's copy of the prefs changes on every save, and reading it on each
+  // render would put the drawer back to the stored axis the moment another
+  // preference was written.
+  const [axis, setAxis] = useState<SortAxis>(state.prefs.sortAxis)
+
+  function chooseAxis(next: SortAxis): void {
+    setAxis(next)
+    state.setPrefs({ sortAxis: next })
+  }
 
   // "Lazy, on panel open" in one line: this component exists only while the
   // drawer is open, so mounting it is the open and unmounting it is the close,
@@ -67,7 +78,7 @@ export function Drawer({ state, listed, onClose }: DrawerProps) {
 
       {empty !== null && <Empty kind={empty} />}
 
-      {listed.length > 0 && <SortPicker axis={axis} onChange={setAxis} />}
+      {listed.length > 0 && <SortPicker axis={axis} onChange={chooseAxis} />}
 
       {groups.map((group) => (
         <section class="group" key={group.label ?? 'all'}>
@@ -85,6 +96,15 @@ export function Drawer({ state, listed, onClose }: DrawerProps) {
           Reading {count(unread, 'resolved thread')} from GitHub. GitHub does not render a resolved
           thread's comments, so each one is fetched and listed as it arrives.
         </p>
+      )}
+
+      {/* Not on a build the extension could not read, where nothing was hidden
+          in either mode and the control would claim otherwise. */}
+      {empty !== 'unsupported' && (
+        <Settings
+          mode={state.prefs.hideMode}
+          onChange={(mode) => state.setPrefs({ hideMode: mode })}
+        />
       )}
     </aside>
   )

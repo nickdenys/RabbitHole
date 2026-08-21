@@ -2,6 +2,7 @@ import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { NO_CHECK } from '../src/count'
 import type { TriageState } from '../src/engine'
 import { updatePanel } from '../src/panel/mount'
+import { DEFAULT_PREFS } from '../src/prefs'
 import type { PageKind } from '../src/types'
 
 const HOST_ID = 'coderabbit-triage-root'
@@ -29,6 +30,8 @@ function state(kind: PageKind): TriageState {
     counts: { total: 0, unresolved: 0, hidden: 0, unparsed: 0 },
     check: NO_CHECK,
     readResolved: () => {},
+    prefs: DEFAULT_PREFS,
+    setPrefs: () => {},
   }
 }
 

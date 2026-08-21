@@ -6,6 +6,7 @@ import type { HideVerdict } from '../src/hide/policy'
 import { forgetSessionFindings } from '../src/panel/actions'
 import { App } from '../src/panel/App'
 import { badges, emptyState, keptReason, listedRows, unreadCount } from '../src/panel/rows'
+import { DEFAULT_PREFS } from '../src/prefs'
 import type { Finding, Thread, ThreadAuthors } from '../src/types'
 import { loadFixture } from './support/fixture'
 
@@ -147,6 +148,10 @@ function stateOf(rows: TriageRow[], over: Partial<TriageState> = {}): TriageStat
     },
     // Overridden by the cases that assert the drawer asks for the fetch.
     readResolved: () => {},
+    // The defaults, so every case below draws a safe mode drawer sorted by
+    // severity unless it says otherwise, and no case writes to storage.
+    prefs: DEFAULT_PREFS,
+    setPrefs: () => {},
     ...over,
   }
 }
@@ -552,6 +557,132 @@ describe('the sort picker', () => {
     await click(host, '.handle')
 
     expect(host.querySelector('.sort-select')).toBeNull()
+  })
+})
+
+/**
+ * The preferences as the reader meets them: the hide mode control, and the two
+ * choices that are remembered by being used. What is stored, and what happens
+ * to a stored value this build does not know, is `prefs.test.ts`.
+ */
+describe('the preferences', () => {
+  const modes = (host: HTMLElement): HTMLInputElement[] => [
+    ...host.querySelectorAll<HTMLInputElement>('.setting input'),
+  ]
+
+  /** Pick a mode the way a reader does, and let preact settle the render. */
+  async function choose(host: HTMLElement, value: string): Promise<void> {
+    const input = modes(host).find((radio) => radio.value === value)
+    if (input === undefined) throw new Error(`The drawer offers no ${value} mode`)
+
+    input.click()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+
+  it('offers both modes and marks the one in force', async () => {
+    const host = mount(stateOf([row()]))
+    await click(host, '.handle')
+
+    expect(modes(host).map((radio) => radio.value)).toEqual(['safe', 'aggressive'])
+    expect(modes(host).map((radio) => radio.checked)).toEqual([true, false])
+  })
+
+  it('marks aggressive when that is the mode the page was hidden in', async () => {
+    const host = mount(stateOf([row()], { prefs: { ...DEFAULT_PREFS, hideMode: 'aggressive' } }))
+    await click(host, '.handle')
+
+    expect(modes(host).map((radio) => radio.checked)).toEqual([false, true])
+  })
+
+  /**
+   * The measurement from [[Design decisions]], next to the toggle rather than
+   * behind it. Aggressive mode hides threads a person has replied to, and the
+   * reader deciding that is owed the number before the click.
+   */
+  it('says what aggressive mode costs, in the number that decided the default', async () => {
+    const host = mount(stateOf([row()]))
+    await click(host, '.handle')
+
+    const aggressive = host.querySelectorAll('.setting')[1]
+    expect(aggressive.textContent).toContain('29 of 36')
+  })
+
+  it('asks the engine to switch, rather than deciding anything itself', async () => {
+    const setPrefs = vi.fn()
+    const host = mount(stateOf([row()], { setPrefs }))
+    await click(host, '.handle')
+    await choose(host, 'aggressive')
+
+    expect(setPrefs).toHaveBeenCalledWith({ hideMode: 'aggressive' })
+  })
+
+  // Nothing was hidden in either mode on a build the extension could not read,
+  // so a mode control there would be a claim about a page it did not touch.
+  it('offers no mode control on a build that could not be read', async () => {
+    const host = mount(stateOf([], { kind: 'react' }))
+    await click(host, '.handle')
+
+    expect(host.querySelector('.settings')).toBeNull()
+  })
+
+  it('opens with the drawer already open when that is what was remembered', () => {
+    const host = mount(stateOf([row()], { prefs: { ...DEFAULT_PREFS, drawerOpen: true } }))
+
+    expect(host.querySelector('.drawer')).not.toBeNull()
+  })
+
+  it('remembers the drawer being opened, and being closed again', async () => {
+    const setPrefs = vi.fn()
+    const host = mount(stateOf([row()], { setPrefs }))
+
+    await click(host, '.handle')
+    expect(setPrefs).toHaveBeenLastCalledWith({ drawerOpen: true })
+
+    await click(host, '.close')
+    expect(setPrefs).toHaveBeenLastCalledWith({ drawerOpen: false })
+  })
+
+  it('sorts by the remembered axis when the drawer opens', async () => {
+    const host = mount(stateOf([row()], { prefs: { ...DEFAULT_PREFS, sortAxis: 'effort' } }))
+    await click(host, '.handle')
+
+    expect(host.querySelector<HTMLSelectElement>('.sort-select')?.value).toBe('effort')
+  })
+
+  it('remembers the axis the reader picks', async () => {
+    const setPrefs = vi.fn()
+    const host = mount(stateOf([row()], { setPrefs }))
+    await click(host, '.handle')
+
+    const select = host.querySelector<HTMLSelectElement>('.sort-select')
+    if (select === null) throw new Error('The drawer drew no sort picker')
+    select.value = 'file'
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(setPrefs).toHaveBeenCalledWith({ sortAxis: 'file' })
+  })
+
+  /**
+   * The engine's copy of the prefs changes on every save, and a drawer that
+   * read the axis on each render would jump back to the stored one the moment
+   * another preference was written. The picked axis outranks the stored one for
+   * as long as the drawer is open.
+   */
+  it('keeps the picked axis when a later pass publishes the stored one', async () => {
+    const host = mount(stateOf([row()]))
+    await click(host, '.handle')
+
+    const select = host.querySelector<HTMLSelectElement>('.sort-select')
+    if (select === null) throw new Error('The drawer drew no sort picker')
+    select.value = 'file'
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    render(<App state={stateOf([row()], { prefs: { ...DEFAULT_PREFS, drawerOpen: true } })} />, host)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(host.querySelector<HTMLSelectElement>('.sort-select')?.value).toBe('file')
   })
 })
 

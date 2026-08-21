@@ -3,11 +3,12 @@ import { detectPage, pullRequestKey } from './detect'
 import { parseThreadFragment, type FetchedThread } from './fetch/parse'
 import { fetchThreadHtml } from './fetch/threads'
 import { applyHiding, revealAll } from './hide/apply'
-import { hideVerdict, type HideMode, type HideVerdict } from './hide/policy'
+import { hideVerdict, type HideVerdict } from './hide/policy'
 import { forgetSessionFindings } from './panel/actions'
 import { readFinding } from './parse/finding'
 import { scanNotes, type CodeRabbitNote } from './parse/notes'
 import { scanThreads } from './parse/thread'
+import { DEFAULT_PREFS, savePrefs, type Prefs } from './prefs'
 import type { Finding, PageKind, Thread } from './types'
 
 /**
@@ -71,17 +72,28 @@ export interface TriageState {
    * pass is the only thing that may decide what the page looks like.
    */
   readResolved: () => void
+  /**
+   * The reader's three choices, as of this pass. `hideMode` is the one the
+   * engine acts on; the other two are here because the panel is only ever given
+   * a state, and a second channel into it would be a second thing to keep in
+   * step with Turbo.
+   */
+  prefs: Prefs
+  /**
+   * Change one or more of them, saving them and, for `hideMode`, re-deciding
+   * the page.
+   *
+   * The mode change is a pass rather than a scheduled one: it is a click, the
+   * reader is looking at the timeline, and A7's rule that a pass owns the whole
+   * hidden set is what makes it an ordinary recompute rather than an undo.
+   * Nothing else here touches the DOM, so the sort axis and the drawer's state
+   * are saved and no pass is run for them.
+   */
+  setPrefs: (prefs: Partial<Prefs>) => void
 }
 
 /** Long enough to coalesce a Turbo render, short enough to feel immediate. */
 const SETTLE_MS = 150
-
-/**
- * Safe until B7 puts the toggle behind a preference. A7 established that a pass
- * owns the whole hidden set, so switching this later needs no undo path: the
- * next pass simply names fewer elements and the rest come back.
- */
-const MODE: HideMode = 'safe'
 
 /** The two elements the extension puts in the light DOM. See `isOurs`. */
 const OUR_IDS = new Set(['coderabbit-triage-root', 'coderabbit-triage-style'])
@@ -103,8 +115,22 @@ const OUR_IDS = new Set(['coderabbit-triage-root', 'coderabbit-triage-style'])
  * goes, a pending pass is cancelled, and the page is restored to the state it
  * would have been in without the extension.
  */
-export function startEngine(doc: Document, onState: (state: TriageState) => void): () => void {
+export function startEngine(
+  doc: Document,
+  onState: (state: TriageState) => void,
+  initial: Prefs = DEFAULT_PREFS,
+): () => void {
   let scheduled: ReturnType<typeof setTimeout> | undefined
+
+  /**
+   * The prefs every pass reads, which the caller has already loaded.
+   *
+   * Loaded before the engine starts rather than inside it, so the first pass
+   * hides with the mode the reader chose. Reading them here would mean hiding
+   * in safe mode and then hiding again in aggressive one tick later, which is
+   * a reader watching their comments disappear twice.
+   */
+  let prefs = initial
 
   /**
    * The pull request the last pass read, `null` for a page that is not one, and
@@ -148,9 +174,25 @@ export function startEngine(doc: Document, onState: (state: TriageState) => void
     if (page !== undefined && current !== page) forget()
     page = current
 
-    const state = runPass(doc, url, fetched, readResolved)
+    const state = runPass(doc, url, fetched, prefs, readResolved, setPrefs)
     published = state.threads
     onState(state)
+  }
+
+  /**
+   * Remember a choice, and redecide the page if it was the one that changes
+   * what may be hidden.
+   *
+   * The save is not awaited, and the pass does not wait for it either: the
+   * timeline should change on the click, and a write that fails is a preference
+   * that reverts next visit rather than a hide that did not happen.
+   */
+  function setPrefs(next: Partial<Prefs>): void {
+    const before = prefs
+    prefs = { ...prefs, ...next }
+    void savePrefs(next)
+
+    if (prefs.hideMode !== before.hideMode) pass()
   }
 
   function schedule(records: MutationRecord[]): void {
@@ -296,7 +338,9 @@ function runPass(
   doc: Document,
   url: string,
   fetched: ReadonlyMap<string, FetchedThread | null>,
+  prefs: Prefs,
   readResolved: () => void,
+  setPrefs: (prefs: Partial<Prefs>) => void,
 ): TriageState {
   const kind = detectPage(doc, url)
 
@@ -315,6 +359,8 @@ function runPass(
       counts: NO_COUNTS,
       check: NO_CHECK,
       readResolved,
+      prefs,
+      setPrefs,
     }
   }
 
@@ -338,7 +384,7 @@ function runPass(
     rows.push({
       thread,
       finding: readFinding(thread.el) ?? entry?.finding ?? null,
-      verdict: hideVerdict(thread, MODE),
+      verdict: hideVerdict(thread, prefs.hideMode),
     })
   }
 
@@ -361,6 +407,8 @@ function runPass(
       unparsed: threads.filter((thread) => isUnparsed(verdicts.get(thread))).length,
     },
     readResolved,
+    prefs,
+    setPrefs,
   }
 }
 

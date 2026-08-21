@@ -33,7 +33,9 @@ Everything reads the rendered page. No API token, no backend, no permission beyo
 
 **Safe mode is the default: a thread is hidden only if every comment in it is CodeRabbit's.** One human reply, or one unsubmitted comment of your own, keeps the thread in the timeline and badges it in the panel.
 
-**Aggressive mode hides all CodeRabbit rooted threads.** It is an explicit toggle, for teams that never discuss findings inline.
+**Aggressive mode hides all CodeRabbit rooted threads.** It is an explicit toggle at the foot of the drawer, for teams that never discuss findings inline. Both invariants hold in both modes: neither one hides a thread it could not read or could not prove is CodeRabbit's.
+
+**The mode, the sort axis and whether the drawer is open are remembered** in `chrome.storage.local`, per browser and never synced. They are read before the first hide pass, so a page is hidden once, in the mode you chose. Nothing about a pull request is stored, and a storage read that fails is safe mode.
 
 The walkthrough comment and the "Actionable comments posted: N" summaries are hidden too, but read first: their total is compared against the threads found, and the panel warns when the page holds fewer than CodeRabbit says it posted. GitHub renders a long conversation in pieces, so a big pull request opens with a handful of its threads in the page and a reassuringly small number on the handle. The check only warns, it never blocks and never hides less.
 
@@ -54,8 +56,8 @@ The walkthrough comment and the "Actionable comments posted: N" summaries are hi
 * Fetch resolved threads on panel open, so they list as findings rather than as a count (done)
 * Unresolve, through GitHub's own button (done)
 * The count check: compare CodeRabbit's own "Actionable comments posted: N" against the threads found, and warn when the page holds fewer (done)
-* Sort by state, category and effort, with grouped headers where a flat list would read as noise
-* The aggressive hide toggle, and the preferences that hold it
+* Sort by state, category and effort, with grouped headers where a flat list would read as noise (done)
+* The aggressive hide toggle, and the preferences that hold it (done)
 
 ## Development
 

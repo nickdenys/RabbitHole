@@ -13,9 +13,18 @@ interface AppProps {
  * Open state lives here rather than in the engine: a pass runs on every
  * mutation and publishes a new state object, and preact keeps this component's
  * state across those renders, so a page that churns does not close the drawer.
+ *
+ * The remembered value seeds it and is written back on every toggle, so a
+ * reader who works with the drawer open arrives at the next pull request with
+ * it open, and the fetch for the resolved threads starts with the page.
  */
 export function App({ state }: AppProps) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(state.prefs.drawerOpen)
+
+  function show(next: boolean): void {
+    setOpen(next)
+    state.setPrefs({ drawerOpen: next })
+  }
 
   const readable = state.kind === 'classic'
   const listed = readable ? listedRows(state) : []
@@ -28,7 +37,7 @@ export function App({ state }: AppProps) {
       <button
         class={warn ? 'handle warn' : 'handle'}
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => show(!open)}
         title={handleTitle(readable, todo, state.counts.unparsed, missing)}
         aria-expanded={open}
       >
@@ -36,7 +45,7 @@ export function App({ state }: AppProps) {
         {warn && readable ? ' ⚠' : ''}
       </button>
 
-      {open && <Drawer state={state} listed={listed} onClose={() => setOpen(false)} />}
+      {open && <Drawer state={state} listed={listed} onClose={() => show(false)} />}
     </div>
   )
 }

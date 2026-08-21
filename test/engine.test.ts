@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { startEngine, type TriageState } from '../src/engine'
+import { DEFAULT_PREFS, type Prefs } from '../src/prefs'
 import {
   forgetSessionFindings,
   resolveThread,
@@ -96,6 +97,20 @@ function threadMarkup(id: number, wrapper = 'js-timeline-item'): string {
         </review-thread-collapsible>
       </turbo-frame>
     </div>`
+}
+
+/**
+ * The same thread with a person's reply under CodeRabbit's comment, which is
+ * the one thread the two modes disagree about: safe mode leaves it in the
+ * timeline, aggressive mode hides it and the reply with it.
+ */
+function threadWithReply(id: number): string {
+  return threadMarkup(id).replace(
+    '</div>\n          </div>',
+    '</div>\n            <div class="review-comment">' +
+      '<a class="author" href="/nickdenys">nickdenys</a>' +
+      '<div class="comment-body">Fixed.</div></div>\n          </div>',
+  )
 }
 
 function doc(html: string): Document {
@@ -714,5 +729,132 @@ describe('reading the resolved threads', () => {
     // arrived at, is another review's finding on this review's row.
     expect(latest(states).rows[0].finding).toBeNull()
     expect(latest(states).rows[0].verdict).toEqual({ hide: false, reason: 'collapsed' })
+  })
+})
+
+/**
+ * The hide mode, which is the one preference the engine acts on. Whether it
+ * survives a browser restart is `prefs.test.ts`; this is that the pass reads it,
+ * that changing it redecides the page at once, and that the other two
+ * preferences never touch the timeline.
+ */
+describe('the hide mode', () => {
+  /** Two threads CodeRabbit started, one of which a person has replied to. */
+  const MIXED = threadMarkup(1) + threadWithReply(2)
+
+  function engineWith(d: Document, prefs: Partial<Prefs>): TriageState[] {
+    const states: TriageState[] = []
+    teardowns.push(startEngine(d, (state) => states.push(state), { ...DEFAULT_PREFS, ...prefs }))
+    return states
+  }
+
+  it('is safe when the caller passes no preferences at all', () => {
+    const states = engineOn(doc(MIXED))
+
+    expect(latest(states).prefs).toEqual(DEFAULT_PREFS)
+    expect(latest(states).counts.hidden).toBe(1)
+  })
+
+  // The rule B7 exists for: the first pass hides in the reader's own mode.
+  // Starting in safe mode and correcting afterwards is the same set of comments
+  // disappearing twice, on every page.
+  it('hides in the given mode on the very first pass', () => {
+    const states = engineWith(doc(MIXED), { hideMode: 'aggressive' })
+
+    expect(states.length).toBe(1)
+    expect(latest(states).counts.hidden).toBe(2)
+  })
+
+  it('publishes the preferences it was started with', () => {
+    const prefs: Prefs = { hideMode: 'aggressive', sortAxis: 'file', drawerOpen: true }
+    const states = engineWith(doc(MIXED), prefs)
+
+    expect(latest(states).prefs).toEqual(prefs)
+  })
+
+  it('redecides the page on the click rather than on the next mutation', () => {
+    const d = doc(MIXED)
+    const states = engineOn(d)
+    const replied = d.querySelectorAll('review-thread-collapsible')[1]
+
+    expect(isHidden(replied)).toBe(false)
+
+    latest(states).setPrefs({ hideMode: 'aggressive' })
+
+    // No timer advanced: a debounced pass would leave the thread on screen
+    // until something else changed the page.
+    expect(isHidden(replied)).toBe(true)
+    expect(latest(states).counts.hidden).toBe(2)
+    expect(latest(states).prefs.hideMode).toBe('aggressive')
+  })
+
+  /**
+   * Switching back needs no undo path, per A7: a pass owns the whole hidden set,
+   * so the next one simply names fewer elements and the rest come back.
+   */
+  it('brings the thread back when the reader switches back', () => {
+    const d = doc(MIXED)
+    const states = engineWith(d, { hideMode: 'aggressive' })
+    const replied = d.querySelectorAll('review-thread-collapsible')[1]
+
+    latest(states).setPrefs({ hideMode: 'safe' })
+
+    expect(isHidden(replied)).toBe(false)
+    expect(latest(states).counts.hidden).toBe(1)
+  })
+
+  it('runs no pass for a preference that decides nothing about the page', () => {
+    const states = engineOn(doc(MIXED))
+
+    latest(states).setPrefs({ sortAxis: 'file', drawerOpen: true })
+
+    expect(states.length).toBe(1)
+  })
+
+  it('carries a preference that decided nothing into the next pass anyway', async () => {
+    const d = doc(MIXED)
+    const states = engineOn(d)
+
+    latest(states).setPrefs({ sortAxis: 'file' })
+    d.body.insertAdjacentHTML('beforeend', threadMarkup(9001))
+    await settle()
+
+    expect(latest(states).prefs.sortAxis).toBe('file')
+  })
+
+  it('keeps the mode across a navigation to another pull request', async () => {
+    const d = doc(MIXED)
+    const states = engineWith(d, { hideMode: 'aggressive' })
+
+    navigateTo(OTHER_PR, d)
+    await settle()
+
+    expect(latest(states).prefs.hideMode).toBe('aggressive')
+    expect(latest(states).counts.hidden).toBe(2)
+  })
+
+  // The record it writes is `prefs.test.ts`'s subject. This is only that a
+  // choice made in the panel reaches storage at all, rather than living in one
+  // tab until it is closed.
+  it('writes every change to chrome.storage.local', () => {
+    const set = vi.fn(async () => {})
+    vi.stubGlobal('chrome', { storage: { local: { get: vi.fn(async () => ({})), set } } })
+
+    const states = engineOn(doc(MIXED))
+    latest(states).setPrefs({ hideMode: 'aggressive' })
+
+    expect(set).toHaveBeenCalledWith({ prefs: expect.objectContaining({ hideMode: 'aggressive' }) })
+  })
+
+  // Aggressive mode is a wider net, never a different one. The three rules that
+  // hold both invariants up are the policy's, and this is the composition
+  // saying the engine did not route around them.
+  it('still never hides a thread it could not attribute', () => {
+    const unreadable = threadMarkup(3).replace('<a class="author" href="/apps/coderabbitai">coderabbitai</a>', '')
+    const d = doc(MIXED + unreadable)
+    const states = engineWith(d, { hideMode: 'aggressive' })
+
+    expect(latest(states).counts.hidden).toBe(2)
+    expect(isHidden(d.querySelectorAll('review-thread-collapsible')[2])).toBe(false)
   })
 })

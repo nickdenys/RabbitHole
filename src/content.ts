@@ -1,5 +1,6 @@
 import { startEngine } from './engine'
 import { updatePanel } from './panel/mount'
+import { loadPrefs } from './prefs'
 
 /**
  * The bootstrap, and nothing else.
@@ -23,4 +24,12 @@ import { updatePanel } from './panel/mount'
  * teardown exists for the tests and for the day one is needed, and leaving a
  * pull request is an ordinary pass that publishes `not-pr` rather than a stop.
  */
-startEngine(document, updatePanel)
+/**
+ * **The prefs are read before the first pass, which is the only ordering rule
+ * here.** Starting the engine first would hide in safe mode and then hide again
+ * in the mode the reader actually chose, which is a reader watching comments
+ * disappear twice on every page. `loadPrefs` never rejects and answers with the
+ * defaults when storage cannot be read, so this is a delay of one storage round
+ * trip and never a page the extension failed to start on.
+ */
+void loadPrefs().then((prefs) => startEngine(document, updatePanel, prefs))
