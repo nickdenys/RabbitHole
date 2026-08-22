@@ -772,6 +772,7 @@ describe('the hide mode', () => {
       sortLeading: false,
       drawerOpen: true,
       theme: 'dark',
+      autoLoadMore: false,
     }
     const states = engineWith(doc(MIXED), prefs)
 
@@ -862,5 +863,101 @@ describe('the hide mode', () => {
 
     expect(latest(states).counts.hidden).toBe(2)
     expect(isHidden(d.querySelectorAll('review-thread-collapsible')[2])).toBe(false)
+  })
+})
+
+/** CodeRabbit's summary, claiming `count` findings. */
+function noteMarkup(count: number): string {
+  return `
+    <div class="js-timeline-item">
+      <div class="TimelineItem">
+        <img class="avatar">
+        <div class="timeline-comment-group">
+          <a href="/apps/coderabbitai" class="author">coderabbitai</a>
+          <div class="comment-body"><p><strong>Actionable comments posted: ${count}</strong></p></div>
+        </div>
+      </div>
+    </div>`
+}
+
+/**
+ * GitHub's own "Load more" control, standing for the thread(s) it has not
+ * rendered yet. Clicking its button is wired, in these tests, to do what
+ * GitHub's own handler does on a real page: insert `reveals` and remove the
+ * form, so the engine's next pass sees a page with one fewer thing missing.
+ */
+function paginationControl(doc: Document, reveals: string): void {
+  doc.body.insertAdjacentHTML(
+    'beforeend',
+    `<form class="ajax-pagination-form js-ajax-pagination">
+      <button type="submit">1 hidden conversation</button>
+      <button type="submit" data-disable-with="Loading…">Load more…</button>
+    </form>`,
+  )
+
+  const form = doc.body.lastElementChild!
+  form.querySelector('[data-disable-with]')!.addEventListener('click', () => {
+    form.insertAdjacentHTML('beforebegin', reveals)
+    form.remove()
+  })
+}
+
+describe('auto-loading "Load more"', () => {
+  it('clicks it on its own until nothing is missing, then stops', async () => {
+    const d = doc(threadMarkup(1) + noteMarkup(2))
+    paginationControl(d, threadMarkup(2))
+
+    const states = engineOn(d)
+    expect(latest(states).check.missing).toBe(1)
+
+    await settle()
+
+    expect(latest(states).check.missing).toBe(0)
+    expect(latest(states).counts.total).toBe(2)
+    expect(d.querySelector('.ajax-pagination-form')).toBeNull()
+
+    // Nothing left to click, so a further settle publishes no further state.
+    const before = states.length
+    await settle()
+    expect(states.length).toBe(before)
+  })
+
+  it('clicks every control still on the page in one pass, not one at a time', async () => {
+    const d = doc(threadMarkup(1) + noteMarkup(3))
+    paginationControl(d, threadMarkup(2))
+    paginationControl(d, threadMarkup(3))
+
+    const states = engineOn(d)
+    await settle()
+
+    expect(latest(states).check.missing).toBe(0)
+    expect(latest(states).counts.total).toBe(3)
+  })
+
+  it('never clicks it when the preference is off', async () => {
+    const d = doc(threadMarkup(1) + noteMarkup(2))
+    paginationControl(d, threadMarkup(2))
+
+    const states: TriageState[] = []
+    teardowns.push(
+      startEngine(d, (state) => states.push(state), { ...DEFAULT_PREFS, autoLoadMore: false }),
+    )
+    await settle()
+
+    expect(latest(states).check.missing).toBe(1)
+    expect(latest(states).counts.total).toBe(1)
+    expect(d.querySelector('.ajax-pagination-form')).not.toBeNull()
+  })
+
+  it('does nothing on a page where nothing is missing', async () => {
+    const d = doc(threadMarkup(1) + noteMarkup(1))
+    paginationControl(d, '')
+
+    const states = engineOn(d)
+    await settle()
+
+    // The control was never clicked, because there was never a gap to close.
+    expect(d.querySelector('.ajax-pagination-form')).not.toBeNull()
+    expect(latest(states).check.missing).toBe(0)
   })
 })

@@ -37,6 +37,21 @@ function item(threads: number, note = false): string {
   return `<div class="js-timeline-item">${summary}${rows}</div>`
 }
 
+/** Same shape as `item`, plus GitHub's "there is more" control among the threads. */
+function itemWithMoreControl(threads: number): string {
+  const rows = Array.from(
+    { length: threads },
+    (_, i) => `
+      <div class="TimelineItem">
+        <review-thread-collapsible id="thread-${i}">
+          <div class="timeline-comment-group">thread ${i}</div>
+        </review-thread-collapsible>
+      </div>`,
+  ).join('')
+
+  return `<div class="js-timeline-item">${rows}<form id="more-control" class="ajax-pagination-form">N hidden conversations</form></div>`
+}
+
 function doc(html: string): Document {
   const d = document.implementation.createHTMLDocument()
   d.body.innerHTML = html
@@ -90,6 +105,20 @@ describe('applyHiding', () => {
     applyHiding([...threads(d), note], d)
 
     expect(hidden(d)).toEqual(['js-timeline-item'])
+  })
+
+  it('leaves the item alone when it holds GitHub\'s own "more" control, even with every rendered thread targeted', () => {
+    // The bug this closes: a review posting more threads than GitHub renders
+    // up front carries a `form.ajax-pagination-form` beside the ones it did
+    // render. Every rendered thread being CodeRabbit's used to collapse the
+    // whole item, taking GitHub's own "N hidden conversations" button with it,
+    // so a reader had no way to load the rest and no warning ever told them.
+    const d = doc(itemWithMoreControl(3))
+
+    applyHiding(threads(d), d)
+
+    expect(hidden(d)).toEqual(['thread-0', 'thread-1', 'thread-2'])
+    expect(d.getElementById('more-control')?.closest(HIDDEN)).toBe(null)
   })
 
   it('does nothing the second time', () => {

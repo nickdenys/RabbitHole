@@ -6,7 +6,7 @@ CodeRabbit's comments come out of the timeline and go into a side drawer, where 
 
 **The checklist is the point. Hiding the comments is just how the findings get somewhere you can work them.** Existing tools (CodeRabbit's own Houdini, various userscripts) only do the hiding.
 
-**Status: v0.2 works.** It builds, loads unpacked, reads every CodeRabbit thread on a supported pull request page, takes the ones it can prove are CodeRabbit's out of the timeline, and puts them in a drawer as a row each: a tick box, the title, the file, a pill carrying the category and the effort, badges, and the reason for anything it deliberately left on the page. The list groups by severity and sorts four ways in either direction, Open and Resolved are tabs, and the footer counts how far down the review you are. Every row can resolve or reopen through GitHub's own button, copy CodeRabbit's agent prompt, and open itself on Files changed. Pressing a row's title puts that one finding back in the timeline and scrolls to it, and pressing it again takes it out, so you can read a comment in context without giving up the hiding for the rest of the review.
+**Status: v0.3 works.** It builds, loads unpacked, reads every CodeRabbit thread on a supported pull request page, takes the ones it can prove are CodeRabbit's out of the timeline, and puts them in a drawer as a row each: a tick box, the title, the file, a pill carrying the category and the effort, badges, and the reason for anything it deliberately left on the page. The list groups by severity and sorts four ways in either direction, Open and Resolved are tabs, and the footer counts how far down the review you are. Every row can resolve or reopen through GitHub's own button, copy CodeRabbit's agent prompt, and open itself on Files changed. Pressing a row's title puts that one finding back in the timeline and scrolls to it, and pressing it again takes it out, so you can read a comment in context without giving up the hiding for the rest of the review. A checkbox on the toolbar icon turns the whole extension off, in every open tab, immediately.
 
 **The closed drawer is a tab on the page's edge** carrying CodeRabbit's mark, the number still to do, and a meter of that number by severity, so three blockers and ten nitpicks do not look alike from across the screen. Hovering it widens the tab into the sentence behind those three.
 
@@ -24,7 +24,7 @@ Number 3 exists because GitHub is rewriting the Conversation page in React. On a
 
 ## How it works
 
-Everything reads the rendered page. No API token, no backend, no permission beyond `storage`.
+Everything reads the rendered page. No API token, no backend, and the only permissions are `storage` and `contextMenus`, the latter for the toolbar toggle below.
 
 * **Unresolved threads are already in the page**, so your actual worklist costs zero network requests.
 * **Resolved threads are collapsed** and show no author, so they are fetched lazily on panel open (six at a time) through GitHub's own deferred thread endpoint, using your session cookie. Private repos work without a token. The response is parsed with `DOMParser` and never injected: the panel renders text, so no sanitizer is needed. A thread whose fetch fails is listed as unreadable and stays in the timeline, because a finding nobody could read is exactly what must never disappear quietly.
@@ -42,6 +42,14 @@ Everything reads the rendered page. No API token, no backend, no permission beyo
 **The mode, the sort axis, its direction, the panel's theme and whether the drawer is open are remembered** in `chrome.storage.local`, per browser and never synced. They are read before the first hide pass, so a page is hidden once, in the mode you chose. Nothing about a pull request is stored, and a storage read that fails is safe mode.
 
 The walkthrough comment and the "Actionable comments posted: N" summaries are hidden too, but read first: their total is compared against the threads found, and the panel warns when the page holds fewer than CodeRabbit says it posted. GitHub renders a long conversation in pieces, so a big pull request opens with a handful of its threads in the page and a reassuringly small number on the handle. The check only warns, it never blocks and never hides less.
+
+**By default, the panel closes that gap itself.** Whenever the count check comes up short, it clicks GitHub's own "Load more" for every batch still on the page, the same button you would click yourself, until nothing is missing or nothing is left to click. A preference on the settings sheet turns this off for a reader who would rather load the rest by hand.
+
+### Off switch
+
+**Right click the toolbar icon for a checkbox that turns the extension off entirely.** Unlike it, this is not a preference on any pull request: unchecking it stops the engine outright, in every open tab, immediately, reveals every thread the page had hidden, and takes the panel off the page. The icon carries an `OFF` badge whenever it is unchecked, so the state is visible without opening the menu. Checking it again starts fresh, reading whatever is currently stored for the other five preferences.
+
+It is stored on its own, separately from the mode, sort, theme and load preferences above: it is written by the toolbar's background service worker rather than by the panel, and defaults to on, on a fresh install and whenever the read fails, so nobody meets a silently disabled extension they never chose.
 
 ## Roadmap
 
@@ -68,6 +76,12 @@ The walkthrough comment and the "Actionable comments posted: N" summaries are hi
 **Category and effort read as one pill under each row**, an outline holding a coloured dot, the category in fewer words, a hair rule and the effort. They are two thirds of CodeRabbit's own first line and they arrive together, so a line each spent most of a row's height on six words. Seven categories have a hue and a short form; anything else prints in full in grey, and the words the pill dropped are on its tooltip.
 
 **The panel follows the system's light or dark setting**, and the settings sheet pins it to either one for a reader whose editor and system disagree. Every colour token is a light value and a dark one in the same declaration, so the choice is one CSS property rather than a second copy of the palette.
+
+**v0.3 adds the off switch**, a background service worker and the toolbar menu described above. It is done.
+
+* A checkbox on the toolbar icon's right click menu, backed by its own `chrome.storage.local` key so the background worker never has to merge onto the panel's preferences record (done)
+* Flipping it stops or restarts the content script's engine outright in every open tab, live, rather than waiting for a reload (done)
+* An `OFF` badge on the icon mirrors the checkbox so the state reads without opening the menu (done)
 
 ## Development
 

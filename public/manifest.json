@@ -3,7 +3,12 @@
   "name": "CodeRabbit Triage",
   "version": "0.1.0",
   "description": "Turns CodeRabbit review comments into a triage worklist on GitHub pull requests.",
-  "permissions": ["storage"],
+  "permissions": ["storage", "contextMenus"],
+  "action": {},
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
   "content_scripts": [
     {
       "matches": ["https://github.com/*"],

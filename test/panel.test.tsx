@@ -406,8 +406,8 @@ describe('the panel', () => {
     await click(host, '.handle')
 
     const notice = host.querySelector('.notice.warn')
-    expect(notice?.textContent).toContain('CodeRabbit posted 27 findings')
-    expect(notice?.textContent).toContain('3 are in this page')
+    expect(notice?.textContent).toContain('Only 3 of the 27 findings')
+    expect(notice?.textContent).toContain('CodeRabbit posted')
   })
 
   it('does not warn when the page holds more findings than the total', async () => {
@@ -428,7 +428,7 @@ describe('the panel', () => {
     await click(host, '.handle')
 
     expect(host.querySelector('.empty-title')).toBeNull()
-    expect(host.querySelector('.notice.warn')?.textContent).toContain('CodeRabbit posted 27 findings')
+    expect(host.querySelector('.notice.warn')?.textContent).toContain('Only 0 of the 27 findings')
   })
 
   it('does not claim "nothing left to do" over one either', async () => {
@@ -923,12 +923,28 @@ describe('the preferences', () => {
 
   const modes = (host: HTMLElement): HTMLInputElement[] => group(host, 'cr-hide-mode')
   const themes = (host: HTMLElement): HTMLInputElement[] => group(host, 'cr-theme')
+  const autoLoad = (host: HTMLElement): HTMLInputElement[] => group(host, 'cr-auto-load')
 
   /** The mode now lives on a sheet over the worklist, behind the footer's gear. */
   async function settings(state: TriageState): Promise<HTMLElement> {
     const host = await open(mount(state))
     await click(host, '.gear')
     return host
+  }
+
+  /**
+   * Each row's options are collapsed until a reader asks for them, so a case
+   * that means to click one first opens the row it lives on by the name on
+   * its header.
+   */
+  async function openRow(host: HTMLElement, label: string): Promise<void> {
+    const head = [...host.querySelectorAll<HTMLElement>('.settings-row-head')].find(
+      (button) => button.querySelector('.settings-row-label')?.textContent === label,
+    )
+    if (head === undefined) throw new Error(`The sheet offers no ${label} row`)
+
+    head.click()
+    await new Promise((resolve) => setTimeout(resolve, 0))
   }
 
   /** Pick an option the way a reader does, and let preact settle the render. */
@@ -946,9 +962,48 @@ describe('the preferences', () => {
 
   it('offers both modes and marks the one in force', async () => {
     const host = await settings(stateOf([row()]))
+    await openRow(host, 'Hide mode')
 
     expect(modes(host).map((radio) => radio.value)).toEqual(['safe', 'aggressive'])
     expect(modes(host).map((radio) => radio.checked)).toEqual([true, false])
+  })
+
+  /**
+   * The whole point of the collapsed list: the sheet's resting height is
+   * three rows, and none of the eleven radios behind them exist until a
+   * reader opens the row they belong to.
+   */
+  it('names the current value on the header and holds the options back until it opens', async () => {
+    const host = await settings(stateOf([row()]))
+
+    expect(host.querySelectorAll('.settings-row')).toHaveLength(3)
+    expect(host.querySelectorAll('.setting')).toHaveLength(0)
+    expect(
+      [...host.querySelectorAll('.settings-row-value')].map((value) => value.textContent),
+    ).toEqual(['Safe', 'On', 'Auto'])
+
+    await openRow(host, 'Hide mode')
+    expect(host.querySelectorAll('.setting')).toHaveLength(2)
+  })
+
+  /**
+   * Only one row holds its options out at a time, so opening a second is the
+   * same click as closing whichever was open, rather than a page that grows
+   * with every row a reader has looked at.
+   */
+  it('closes a row when another one opens', async () => {
+    const host = await settings(stateOf([row()]))
+
+    await openRow(host, 'Hide mode')
+    expect(host.querySelectorAll('.setting')).toHaveLength(2)
+
+    await openRow(host, 'Theme')
+    expect(host.querySelectorAll('.setting')).toHaveLength(3)
+
+    const hideHead = [...host.querySelectorAll<HTMLElement>('.settings-row-head')].find(
+      (button) => button.querySelector('.settings-row-label')?.textContent === 'Hide mode',
+    )
+    expect(hideHead?.getAttribute('aria-expanded')).toBe('false')
   })
 
   /**
@@ -974,25 +1029,27 @@ describe('the preferences', () => {
     const host = await settings(
       stateOf([row()], { prefs: { ...DEFAULT_PREFS, hideMode: 'aggressive' } }),
     )
+    await openRow(host, 'Hide mode')
 
     expect(modes(host).map((radio) => radio.checked)).toEqual([false, true])
   })
 
   /**
-   * The measurement from [[Design decisions]], next to the toggle rather than
-   * behind it. Aggressive mode hides threads a person has replied to, and the
-   * reader deciding that is owed the number before the click.
+   * Aggressive mode hides threads a person has replied to, and a reader
+   * deciding that is owed the cost next to the toggle rather than behind it.
    */
-  it('says what aggressive mode costs, in the number that decided the default', async () => {
+  it('says what aggressive mode costs, not just what it does', async () => {
     const host = await settings(stateOf([row()]))
+    await openRow(host, 'Hide mode')
 
     const aggressive = host.querySelectorAll('.setting')[1]
-    expect(aggressive.textContent).toContain('29 of 36')
+    expect(aggressive.textContent).toContain('human reply')
   })
 
   it('asks the engine to switch, rather than deciding anything itself', async () => {
     const setPrefs = vi.fn()
     const host = await settings(stateOf([row()], { setPrefs }))
+    await openRow(host, 'Hide mode')
     await choose(host, modes(host), 'aggressive')
 
     expect(setPrefs).toHaveBeenCalledWith({ hideMode: 'aggressive' })
@@ -1007,8 +1064,35 @@ describe('the preferences', () => {
     expect(host.querySelector('.gear')).toBeNull()
   })
 
+  it('offers both auto-load choices and marks on by default', async () => {
+    const host = await settings(stateOf([row()]))
+    await openRow(host, 'Load hidden findings')
+
+    expect(autoLoad(host).map((radio) => radio.value)).toEqual(['on', 'off'])
+    expect(autoLoad(host).map((radio) => radio.checked)).toEqual([true, false])
+  })
+
+  it('marks off when that is what was remembered', async () => {
+    const host = await settings(
+      stateOf([row()], { prefs: { ...DEFAULT_PREFS, autoLoadMore: false } }),
+    )
+    await openRow(host, 'Load hidden findings')
+
+    expect(autoLoad(host).map((radio) => radio.checked)).toEqual([false, true])
+  })
+
+  it('asks the engine to switch auto-load, rather than deciding anything itself', async () => {
+    const setPrefs = vi.fn()
+    const host = await settings(stateOf([row()], { setPrefs }))
+    await openRow(host, 'Load hidden findings')
+    await choose(host, autoLoad(host), 'off')
+
+    expect(setPrefs).toHaveBeenCalledWith({ autoLoadMore: false })
+  })
+
   it('offers the three themes and marks the system one until somebody picks', async () => {
     const host = await settings(stateOf([row()]))
+    await openRow(host, 'Theme')
 
     expect(themes(host).map((radio) => radio.value)).toEqual(['auto', 'light', 'dark'])
     expect(themes(host).map((radio) => radio.checked)).toEqual([true, false, false])
@@ -1028,6 +1112,7 @@ describe('the preferences', () => {
 
   it('marks the remembered theme on the sheet', async () => {
     const host = await settings(stateOf([row()], { prefs: { ...DEFAULT_PREFS, theme: 'light' } }))
+    await openRow(host, 'Theme')
 
     expect(themes(host).map((radio) => radio.checked)).toEqual([false, true, false])
   })
@@ -1040,6 +1125,7 @@ describe('the preferences', () => {
   it('repaints on the click and asks the engine to remember it', async () => {
     const setPrefs = vi.fn()
     const host = await settings(stateOf([row()], { setPrefs }))
+    await openRow(host, 'Theme')
     await choose(host, themes(host), 'dark')
 
     expect(setPrefs).toHaveBeenCalledWith({ theme: 'dark' })

@@ -1016,38 +1016,55 @@ button {
 .settings {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin: 0;
-  padding: 14px;
-  border: 0;
 }
 
-/* Two groups on one sheet, told apart by a line rather than by more air. The
- * cards are already boxes, so a gap wide enough to separate the groups would
- * read as two screens rather than one.
- *
- * Drawn under the group above rather than over the one below, because a
- * fieldset's legend is laid out on its top border and would sit in the middle
- * of the line. The bottom edge has no legend on it. */
-.settings:not(:last-child) {
+/* One row per setting, told apart by the line under it rather than by air,
+ * the same reasoning the rows below the fold use. */
+.settings-row:not(:last-child) {
   border-bottom: 1px solid var(--line);
 }
 
-.settings-head {
-  padding: 0 0 4px;
+.settings-row-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 14px;
+  cursor: pointer;
+}
+
+.settings-row-head:hover {
+  background: var(--row-hover);
+}
+
+.settings-row-head[aria-expanded='true'] {
+  background: var(--row-hover);
+}
+
+.settings-row-label {
+  flex: 1;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.settings-row-value {
   color: var(--muted);
   font-size: 12px;
 }
 
-.settings-value {
-  color: var(--fg);
-  font-weight: 600;
+.settings-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 8px 10px;
 }
 
 .setting {
   display: flex;
-  gap: 10px;
-  padding: 9px 10px;
+  gap: 9px;
+  padding: 8px;
   border: 1px solid transparent;
   border-radius: 8px;
   cursor: pointer;

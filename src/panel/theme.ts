@@ -35,7 +35,7 @@ export const THEME_LABELS: Record<Theme, string> = {
  * panel that went dark at sunset without warning is worth one clause.
  */
 export const THEME_NOTES: Record<Theme, string> = {
-  auto: "Follow the system's light or dark setting, and change with it while the page is open.",
-  light: 'Always the light palette, whatever the system is set to.',
-  dark: 'Always the dark palette, whatever the system is set to.',
+  auto: "Matches your system's light or dark setting, and switches when it changes.",
+  light: 'Always light, no matter your system setting.',
+  dark: 'Always dark, no matter your system setting.',
 }

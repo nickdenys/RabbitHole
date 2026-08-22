@@ -28,6 +28,16 @@ const THREAD = 'review-thread-collapsible'
 const COMMENT_GROUP = '.timeline-comment-group'
 
 /**
+ * GitHub's own "there is more" control, both shapes: the whole timeline's
+ * `timeline_more_items` and one review's `more_threads`. Present only when
+ * GitHub has threads it has not rendered yet, see `DOM reference.md`.
+ *
+ * Exported so `src/loadmore.ts` clicks exactly what this file refuses to
+ * collapse: the two must never drift out of step with each other.
+ */
+export const MORE_CONTROL = '.ajax-pagination-form'
+
+/**
  * Elements the reader asked to see again, which no later pass may hide.
  *
  * A `WeakSet` because the entries are page elements: Turbo replaces the
@@ -170,6 +180,13 @@ export function revealAll(doc: Document): void {
  * A collapsed thread contributes no comment group and is never a target, so an
  * item holding one can never reach the item branch, which is the invariant
  * about unattributable threads holding here too.
+ *
+ * **An item carrying GitHub's own "N hidden conversations" control is never
+ * covered, whatever the targets say.** That control is the reader's only way
+ * to load threads GitHub has not rendered at all, so folding it into a hidden
+ * item takes away the one button that would tell them the page is incomplete.
+ * The threads GitHub did render still hide individually, same as any item a
+ * pending comment keeps open.
  */
 function hideSet(targets: Element[]): Set<Element> {
   const byItem = new Map<Element, Element[]>()
@@ -197,6 +214,8 @@ function hideSet(targets: Element[]): Set<Element> {
 }
 
 function coversEverything(item: Element, targets: Element[]): boolean {
+  if (item.querySelector(MORE_CONTROL) !== null) return false
+
   const threads = [...item.querySelectorAll(THREAD)]
 
   // Only the groups outside a thread: a thread's own comments go with the

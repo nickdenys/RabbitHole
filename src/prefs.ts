@@ -32,6 +32,16 @@ export interface Prefs {
    * no pass is run for it.
    */
   theme: Theme
+  /**
+   * Click GitHub's own "Load more" button for the reader, whenever the count
+   * check finds fewer findings than CodeRabbit claims.
+   *
+   * The one preference besides `hideMode` that acts on the page rather than on
+   * the panel, and unlike `hideMode` it never hides or reveals anything: it
+   * only clicks a button GitHub already rendered, the same button a reader
+   * would click themselves. See `src/loadmore.ts`.
+   */
+  autoLoadMore: boolean
 }
 
 /**
@@ -48,6 +58,7 @@ export const DEFAULT_PREFS: Prefs = {
   sortLeading: true,
   drawerOpen: false,
   theme: 'auto',
+  autoLoadMore: true,
 }
 
 /** One key holding the whole record, so a read is one call and a write is one write. */
@@ -135,6 +146,8 @@ function validate(value: unknown): Prefs {
       typeof stored.sortLeading === 'boolean' ? stored.sortLeading : DEFAULT_PREFS.sortLeading,
     drawerOpen: typeof stored.drawerOpen === 'boolean' ? stored.drawerOpen : DEFAULT_PREFS.drawerOpen,
     theme: isTheme(stored.theme) ? stored.theme : DEFAULT_PREFS.theme,
+    autoLoadMore:
+      typeof stored.autoLoadMore === 'boolean' ? stored.autoLoadMore : DEFAULT_PREFS.autoLoadMore,
   }
 }
 

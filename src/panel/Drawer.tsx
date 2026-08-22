@@ -169,9 +169,9 @@ export function Drawer({ state, listed, theme, onTheme, onClose }: DrawerProps) 
 
       {state.check.missing > 0 && (
         <p class="notice warn">
-          CodeRabbit posted {state.check.claimed} findings and {state.check.found} are in this page.
-          GitHub renders a long conversation in pieces, so load the rest of it before trusting this
-          list.
+          Only {state.check.found} of the {state.check.claimed} findings CodeRabbit posted have
+          loaded. On a long conversation, GitHub hides the rest behind its own "Load more…" button
+          rather than loading it as you scroll, click that before trusting this list.
         </p>
       )}
 
@@ -309,6 +309,8 @@ export function Drawer({ state, listed, theme, onTheme, onClose }: DrawerProps) 
               onMode={(mode) => state.setPrefs({ hideMode: mode })}
               theme={theme}
               onTheme={onTheme}
+              autoLoadMore={state.prefs.autoLoadMore}
+              onAutoLoadMore={(autoLoadMore) => state.setPrefs({ autoLoadMore })}
             />
           </div>
         </div>

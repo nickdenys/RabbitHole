@@ -9,6 +9,7 @@ const STORED: Prefs = {
   sortLeading: false,
   drawerOpen: true,
   theme: 'dark',
+  autoLoadMore: false,
 }
 
 /**
@@ -63,6 +64,7 @@ describe('loadPrefs', () => {
       sortLeading: true,
       drawerOpen: false,
       theme: 'auto',
+      autoLoadMore: true,
     })
   })
 
@@ -99,6 +101,7 @@ describe('loadPrefs', () => {
     ['sortLeading', { ...STORED, sortLeading: 'backwards' }, { sortLeading: true }],
     ['drawerOpen', { ...STORED, drawerOpen: 'yes' }, { drawerOpen: false }],
     ['theme', { ...STORED, theme: 'solarized' }, { theme: 'auto' }],
+    ['autoLoadMore', { ...STORED, autoLoadMore: 'yes' }, { autoLoadMore: true }],
   ])('falls back on an unknown %s and keeps the rest', async (_field, stored, expected) => {
     stubChrome(holding(stored))
     const { loadPrefs } = await freshPrefs()

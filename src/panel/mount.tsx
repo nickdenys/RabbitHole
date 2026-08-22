@@ -39,7 +39,16 @@ function ensureShadowRoot(): ShadowRoot {
   return shadowRoot
 }
 
-function unmountPanel(): void {
+/**
+ * Take the host off the page, on demand rather than only as a side effect of
+ * a `not-pr` state.
+ *
+ * `updatePanel` reaches this when a pass publishes `not-pr`, which needs a
+ * running engine to say so. `bootstrap.ts` calls it directly when it stops the
+ * engine altogether, because a stopped engine publishes nothing further for
+ * `updatePanel` to react to.
+ */
+export function unmountPanel(): void {
   const host = document.getElementById(HOST_ID)
   if (host && shadowRoot) render(null, shadowRoot)
   host?.remove()

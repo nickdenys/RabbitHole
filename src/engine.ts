@@ -4,6 +4,7 @@ import { parseThreadFragment, type FetchedThread } from './fetch/parse'
 import { fetchThreadHtml } from './fetch/threads'
 import { applyHiding, revealAll } from './hide/apply'
 import { hideVerdict, type HideVerdict } from './hide/policy'
+import { clickLoadMore } from './loadmore'
 import { forgetSessionFindings } from './panel/actions'
 import { readFinding } from './parse/finding'
 import { scanNotes, type CodeRabbitNote } from './parse/notes'
@@ -393,13 +394,23 @@ function runPass(
 
   applyHiding([...hideable.map((thread) => thread.el), ...notes.map((note) => note.el)], doc)
 
+  const check = countCheck(notes, rows)
+
+  // Click GitHub's own "Load more" for the reader, never ours to fetch. The
+  // click is itself a DOM mutation, so it needs no scheduling of its own: it
+  // reaches the observer already watching this document and comes back around
+  // as the next pass, which checks `missing` again against whatever GitHub
+  // just rendered. A page with nothing missing, or nothing left to click,
+  // leaves this a no-op every time it runs.
+  if (prefs.autoLoadMore && check.missing > 0) clickLoadMore(doc)
+
   return {
     kind,
     threads,
     rows,
     notes,
     hidden: new Set(hideable.map((thread) => thread.id)),
-    check: countCheck(notes, rows),
+    check,
     counts: {
       total: threads.length,
       unresolved: threads.filter((thread) => !thread.resolved).length,

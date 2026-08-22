@@ -3,10 +3,19 @@ import { defineConfig } from 'vite'
 
 // Single content script, bundled as one IIFE file. Content scripts cannot be
 // ES modules, so everything (including CSS imported with ?inline) is inlined.
+//
+// `emptyOutDir: false`, because `dist/background.js` comes from the other
+// build, `vite.background.config.ts`, into this same `outDir`. Left at Vite's
+// default of `true`, this config would delete `background.js` on every one of
+// its own rebuilds, including every rebuild `vite build --watch` does in
+// isolation - which is exactly what emptied it while the two builds' outputs
+// were still being worked out. `npm run build` still starts from a clean
+// `dist/` because the `build` script removes it once before either config
+// runs, so neither config emptying its own output is what keeps it clean.
 export default defineConfig({
   build: {
     outDir: 'dist',
-    emptyOutDir: true,
+    emptyOutDir: false,
     target: 'es2022',
     minify: false,
     lib: {
