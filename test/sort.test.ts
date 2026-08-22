@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import type { TriageRow } from '../src/engine'
-import { groupRows, sortRows, SORT_LABELS, type SortAxis } from '../src/panel/sort'
+import {
+  groupRows,
+  SORT_DIRECTIONS,
+  SORT_HINTS,
+  SORT_LABELS,
+  sortRows,
+  type SortAxis,
+} from '../src/panel/sort'
 import type { Severity } from '../src/types'
 
-/** The state and description fields the three B6 axes read. */
+/** The description fields the two B6 axes read. */
 interface RowOver {
-  resolved?: boolean
-  outdated?: boolean
   category?: string | null
   effort?: string | null
 }
@@ -31,8 +36,8 @@ function row(
       timelineItem: null,
       id,
       file,
-      resolved: over.resolved ?? false,
-      outdated: over.outdated ?? false,
+      resolved: false,
+      outdated: false,
       collapsed: false,
       deferredUrl: null,
       authors: null,
@@ -159,43 +164,6 @@ describe('sortRows, both axes', () => {
   })
 })
 
-describe('sortRows, by state', () => {
-  it('orders open, outdated, resolved', () => {
-    const rows = [
-      row('resolved', 'minor', 'a.ts', { resolved: true }),
-      row('outdated', 'minor', 'a.ts', { outdated: true }),
-      row('open', 'minor', 'a.ts'),
-    ]
-
-    expect(ids(sortRows(rows, 'state'))).toEqual(['open', 'outdated', 'resolved'])
-  })
-
-  it('calls a resolved thread resolved even when it is also outdated', () => {
-    const rows = [
-      row('both', 'minor', 'a.ts', { resolved: true, outdated: true }),
-      row('outdated', 'minor', 'a.ts', { outdated: true }),
-    ]
-
-    expect(ids(sortRows(rows, 'state'))).toEqual(['outdated', 'both'])
-  })
-
-  it('breaks a tie on severity, worst first', () => {
-    const rows = [
-      row('open-minor', 'minor', 'a.ts'),
-      row('done-critical', 'critical', 'a.ts', { resolved: true }),
-      row('open-critical', 'critical', 'a.ts'),
-    ]
-
-    expect(ids(sortRows(rows, 'state'))).toEqual(['open-critical', 'open-minor', 'done-critical'])
-  })
-
-  it('sorts a thread with no finding, because state is read off the thread', () => {
-    const rows = [row('unread', null, null, { resolved: true }), row('open', null, null)]
-
-    expect(ids(sortRows(rows, 'state'))).toEqual(['open', 'unread'])
-  })
-})
-
 describe('sortRows, by category', () => {
   it('orders by the category word', () => {
     const rows = [
@@ -277,8 +245,8 @@ describe('sortRows, by effort', () => {
 describe('sortRows, every axis', () => {
   const axes = Object.keys(SORT_LABELS) as SortAxis[]
 
-  it('offers the five the design settled on, severity first', () => {
-    expect(axes).toEqual(['severity', 'file', 'state', 'category', 'effort'])
+  it('offers the four the design settled on, severity first', () => {
+    expect(axes).toEqual(['severity', 'file', 'category', 'effort'])
   })
 
   it.each(axes)('sorts an empty list to an empty list on %s', (axis) => {
@@ -289,7 +257,7 @@ describe('sortRows, every axis', () => {
     const rows = [
       row('described', 'major', 'a.ts', { category: 'B', effort: 'Quick win' }),
       row('bare', null, null),
-      row('done', 'trivial', 'z.ts', { resolved: true, category: null, effort: null }),
+      row('done', 'trivial', 'z.ts', { category: null, effort: null }),
     ]
 
     expect(ids(sortRows(rows, axis)).sort()).toEqual(['bare', 'described', 'done'])
@@ -303,21 +271,111 @@ describe('sortRows, every axis', () => {
 
     expect(ids(rows)).toEqual(before)
   })
+
+  it('names every axis in the picker, with a hint and both directions', () => {
+    for (const axis of axes) {
+      expect(SORT_HINTS[axis]).toBeTruthy()
+      expect(SORT_DIRECTIONS[axis]).toHaveLength(2)
+      expect(SORT_DIRECTIONS[axis][0]).not.toBe(SORT_DIRECTIONS[axis][1])
+    }
+  })
+})
+
+/**
+ * The direction toggle, which is the one control that can put a worklist in the
+ * order nobody would choose by default. Turning it off has to be exactly the
+ * inverse of leaving it on, and has to leave the ties alone.
+ */
+describe('sortRows, the other way round', () => {
+  it('reads the axis backwards on every one of them', () => {
+    const rows = [
+      row('a', 'critical', 'a.ts', { category: 'A', effort: 'Quick win' }),
+      row('b', 'trivial', 'z.ts', { category: 'Z', effort: 'Low value' }),
+    ]
+
+    for (const axis of Object.keys(SORT_LABELS) as SortAxis[]) {
+      expect(ids(sortRows(rows, axis, false))).toEqual(
+        ids(sortRows(rows, axis, true)).reverse(),
+      )
+    }
+  })
+
+  /**
+   * Negated rather than reversed, which is the whole reason it is written that
+   * way: a reverse would also flip two rows that compared equal, and equal rows
+   * are in the timeline's own order.
+   */
+  it('leaves rows that compare equal in page order', () => {
+    const rows = [
+      row('first', 'minor', 'a.ts', { effort: 'Quick win' }),
+      row('second', 'minor', 'a.ts', { effort: 'Quick win' }),
+    ]
+
+    expect(ids(sortRows(rows, 'effort', false))).toEqual(['first', 'second'])
+  })
+
+  it('still keeps every row', () => {
+    const rows = [row('described', 'major', 'a.ts'), row('bare', null, null)]
+
+    expect(ids(sortRows(rows, 'severity', false)).sort()).toEqual(['bare', 'described'])
+  })
 })
 
 describe('groupRows', () => {
   const labels = (groups: { label: string | null }[]): (string | null)[] =>
     groups.map((group) => group.label)
 
-  it('leaves severity, file and effort in one unlabelled group', () => {
+  it('leaves file and effort in one unlabelled group', () => {
     const rows = [row('a', 'minor', 'a.ts'), row('b', 'major', 'b.ts')]
 
-    for (const axis of ['severity', 'file', 'effort'] as const) {
+    for (const axis of ['file', 'effort'] as const) {
       const groups = groupRows(sortRows(rows, axis), axis)
 
       expect(labels(groups)).toEqual([null])
       expect(ids(groups[0].rows)).toHaveLength(2)
     }
+  })
+
+  /**
+   * The drawer opens on this one, so it is the grouping a reader meets first:
+   * three blockers standing apart from ten nitpicks rather than a flat run of
+   * thirteen that has to be read to be counted.
+   */
+  it('heads each severity with CodeRabbit s own word', () => {
+    const rows = [
+      row('trivial', 'trivial', 'a.ts'),
+      row('major-1', 'major', 'a.ts'),
+      row('major-2', 'major', 'b.ts'),
+    ]
+
+    const groups = groupRows(sortRows(rows, 'severity'), 'severity')
+
+    expect(labels(groups)).toEqual(['Major', 'Trivial'])
+    expect(ids(groups[0].rows)).toEqual(['major-1', 'major-2'])
+  })
+
+  it('heads a missing severity as the gap it is', () => {
+    const groups = groupRows(sortRows([row('bare', null, 'a.ts')], 'severity'), 'severity')
+
+    expect(labels(groups)).toEqual(['No severity stated'])
+  })
+
+  /**
+   * Only the severity axis has a colour to be, so it is the only one that hands
+   * the drawer one. A category heading given an arbitrary hue would be reading
+   * as a severity nobody stated.
+   */
+  it('carries the severity for the heading s dot, and only on that axis', () => {
+    const rows = [row('a', 'major', 'a.ts'), row('bare', null, 'a.ts')]
+
+    expect(groupRows(sortRows(rows, 'severity'), 'severity').map((g) => g.severity)).toEqual([
+      'major',
+      'none',
+    ])
+    expect(groupRows(sortRows(rows, 'category'), 'category').map((g) => g.severity)).toEqual([
+      null,
+      null,
+    ])
   })
 
   it('heads each category with its own word', () => {
@@ -337,20 +395,6 @@ describe('groupRows', () => {
     const rows = [row('none', 'minor', 'a.ts', { category: null })]
 
     expect(labels(groupRows(rows, 'category'))).toEqual(['No category stated'])
-  })
-
-  it('heads the three states', () => {
-    const rows = [
-      row('open', 'minor', 'a.ts'),
-      row('outdated', 'minor', 'a.ts', { outdated: true }),
-      row('resolved', 'minor', 'a.ts', { resolved: true }),
-    ]
-
-    expect(labels(groupRows(sortRows(rows, 'state'), 'state'))).toEqual([
-      'Open',
-      'Outdated',
-      'Resolved',
-    ])
   })
 
   it('groups nothing into nothing', () => {

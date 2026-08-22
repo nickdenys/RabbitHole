@@ -72,13 +72,19 @@ export function applyHiding(targets: Element[], doc: Document): void {
 }
 
 /**
- * Put one thread or note back on the page, permanently.
+ * Put one thread or note back on the page, and keep it there.
  *
  * The element the drawer names is not necessarily the element carrying the
  * class: a thread whose whole timeline item was hidden is not hidden itself. So
  * the class comes off the element and off its ancestors, and then the rest of
  * the page is re-derived, which re-hides the revealed thread's siblings
  * individually rather than leaving them exposed.
+ *
+ * **No pass may take this back, but the reader may.** A reveal outlives every
+ * later `applyHiding`, which is what stops a churning page from swallowing a
+ * thread the reader asked to see; `unreveal` is the reader saying they are done
+ * with it. The two together are what the drawer's title toggles, and the
+ * asymmetry is deliberate: the extension never re-hides on its own.
  */
 export function reveal(el: Element): void {
   revealed.add(el)
@@ -88,6 +94,38 @@ export function reveal(el: Element): void {
   }
 
   if (lastDoc !== null) applyHiding(lastTargets, lastDoc)
+}
+
+/**
+ * Undo one `reveal`, so the page decides about this element again.
+ *
+ * Not "hide this": it drops the reader's override and re-derives, so an element
+ * the last pass never wanted hidden stays exactly where it is. That is what
+ * makes the drawer's toggle safe to offer on every row, including the ones the
+ * policy deliberately left in the timeline (invariants 1 and 2): pressing it
+ * there can only ever scroll.
+ *
+ * The class is not removed here, only re-derived, because the element may sit
+ * inside a timeline item that has to collapse back into one hidden element now
+ * that this thread is no longer the exception keeping it open.
+ */
+export function unreveal(el: Element): void {
+  revealed.delete(el)
+
+  if (lastDoc !== null) applyHiding(lastTargets, lastDoc)
+}
+
+/**
+ * Whether this element is out of the timeline right now, which is not the same
+ * as whether the policy wants it out.
+ *
+ * Read off the page rather than off the last verdict, because the two disagree
+ * exactly when the reader has revealed something, and `closest` because the
+ * class may be on an ancestor: a review whose threads all went is hidden as one
+ * `.js-timeline-item` and its threads carry nothing themselves.
+ */
+export function isHidden(el: Element): boolean {
+  return el.closest(`.${HIDDEN_CLASS}`) !== null
 }
 
 /**

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { applyHiding, reveal, revealAll } from '../src/hide/apply'
+import { applyHiding, isHidden, reveal, revealAll, unreveal } from '../src/hide/apply'
 import { hideVerdict, type HideMode } from '../src/hide/policy'
 import { scanNotes } from '../src/parse/notes'
 import { scanThreads } from '../src/parse/thread'
@@ -166,6 +166,83 @@ describe('reveal', () => {
 
     expect(targets[1].closest(HIDDEN)).not.toBe(null)
     expect(targets[2].closest(HIDDEN)).not.toBe(null)
+  })
+})
+
+describe('unreveal', () => {
+  it('puts a revealed thread back where the last pass wanted it', () => {
+    const d = doc(item(3))
+    const targets = threads(d)
+
+    applyHiding(targets, d)
+    reveal(targets[1])
+    unreveal(targets[1])
+
+    expect(isHidden(targets[1])).toBe(true)
+  })
+
+  // Reversing a reveal has to reverse the individual re-hiding it caused, or
+  // the review stays as three hidden threads where it was one hidden item, and
+  // a second reveal would be reversing a different page.
+  it('collapses the review back into one hidden element', () => {
+    const d = doc(item(3))
+    const targets = threads(d)
+
+    applyHiding(targets, d)
+    reveal(targets[1])
+    unreveal(targets[1])
+
+    expect(hidden(d)).toEqual(['js-timeline-item'])
+  })
+
+  // The reveal set is what a later pass consults, so an undo that only took the
+  // class off would come back the next time anything on the page changed.
+  it('lets the next pass hide it again on its own', () => {
+    const d = doc(item(3))
+    const targets = threads(d)
+
+    applyHiding(targets, d)
+    reveal(targets[1])
+    unreveal(targets[1])
+    applyHiding(targets, d)
+
+    expect(hidden(d)).toEqual(['js-timeline-item'])
+  })
+
+  // Nothing here decides what may be hidden, so an element the last pass never
+  // named cannot be hidden by dropping a reveal of it.
+  it('cannot hide an element the last pass did not name', () => {
+    const d = doc(item(2) + item(2))
+    const targets = threads(d)
+
+    applyHiding([targets[0], targets[1]], d)
+    unreveal(targets[2])
+
+    expect(isHidden(targets[2])).toBe(false)
+  })
+})
+
+describe('isHidden', () => {
+  it('is true for a thread whose whole timeline item carries the class', () => {
+    const d = doc(item(2))
+    const targets = threads(d)
+
+    applyHiding(targets, d)
+
+    expect(targets[0].classList.contains('crt-hidden')).toBe(false)
+    expect(isHidden(targets[0])).toBe(true)
+  })
+
+  it('is false before anything is applied and after it is all reversed', () => {
+    const d = doc(item(2))
+    const targets = threads(d)
+
+    expect(isHidden(targets[0])).toBe(false)
+
+    applyHiding(targets, d)
+    revealAll(d)
+
+    expect(isHidden(targets[0])).toBe(false)
   })
 })
 

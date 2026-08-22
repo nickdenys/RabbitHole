@@ -4,8 +4,8 @@ import { DEFAULT_PREFS, type Prefs } from '../src/prefs'
 import {
   forgetSessionFindings,
   resolveThread,
-  revealThread,
   sessionFinding,
+  toggleInTimeline,
 } from '../src/panel/actions'
 import { fixtureNames, loadFixture, loadFragment } from './support/fixture'
 
@@ -461,7 +461,7 @@ describe('navigation', () => {
     const states = engineOn(d)
     const row = latest(states).rows[0]
 
-    revealThread(row)
+    toggleInTimeline(row)
     expect(isHidden(row.thread.el)).toBe(false)
 
     // The document is deliberately not swapped, which is the harder case: a
@@ -766,7 +766,13 @@ describe('the hide mode', () => {
   })
 
   it('publishes the preferences it was started with', () => {
-    const prefs: Prefs = { hideMode: 'aggressive', sortAxis: 'file', drawerOpen: true }
+    const prefs: Prefs = {
+      hideMode: 'aggressive',
+      sortAxis: 'file',
+      sortLeading: false,
+      drawerOpen: true,
+      theme: 'dark',
+    }
     const states = engineWith(doc(MIXED), prefs)
 
     expect(latest(states).prefs).toEqual(prefs)

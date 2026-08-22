@@ -3,7 +3,13 @@ import type { Prefs } from '../src/prefs'
 
 const KEY = 'prefs'
 
-const STORED: Prefs = { hideMode: 'aggressive', sortAxis: 'file', drawerOpen: true }
+const STORED: Prefs = {
+  hideMode: 'aggressive',
+  sortAxis: 'file',
+  sortLeading: false,
+  drawerOpen: true,
+  theme: 'dark',
+}
 
 /**
  * A `chrome.storage.local` that answers from an object, plus the two spies the
@@ -47,11 +53,17 @@ async function freshPrefs() {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('loadPrefs', () => {
-  it('is safe mode, severity and a shut drawer where there is no storage at all', async () => {
+  it('is safe mode, severity, a shut drawer and the system palette with no storage at all', async () => {
     const { loadPrefs, DEFAULT_PREFS } = await freshPrefs()
 
     expect(await loadPrefs()).toEqual(DEFAULT_PREFS)
-    expect(DEFAULT_PREFS).toEqual({ hideMode: 'safe', sortAxis: 'severity', drawerOpen: false })
+    expect(DEFAULT_PREFS).toEqual({
+      hideMode: 'safe',
+      sortAxis: 'severity',
+      sortLeading: true,
+      drawerOpen: false,
+      theme: 'auto',
+    })
   })
 
   it('reads the stored record', async () => {
@@ -84,7 +96,9 @@ describe('loadPrefs', () => {
   it.each([
     ['hideMode', { ...STORED, hideMode: 'hide-everything' }, { hideMode: 'safe' }],
     ['sortAxis', { ...STORED, sortAxis: 'urgency' }, { sortAxis: 'severity' }],
+    ['sortLeading', { ...STORED, sortLeading: 'backwards' }, { sortLeading: true }],
     ['drawerOpen', { ...STORED, drawerOpen: 'yes' }, { drawerOpen: false }],
+    ['theme', { ...STORED, theme: 'solarized' }, { theme: 'auto' }],
   ])('falls back on an unknown %s and keeps the rest', async (_field, stored, expected) => {
     stubChrome(holding(stored))
     const { loadPrefs } = await freshPrefs()

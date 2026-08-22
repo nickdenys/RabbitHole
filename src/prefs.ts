@@ -1,28 +1,54 @@
 import type { HideMode } from './hide/policy'
 import { SORT_LABELS, type SortAxis } from './panel/sort'
+import { THEME_LABELS, type Theme } from './panel/theme'
 
 /**
- * Everything the extension remembers between visits, which is three choices and
+ * Everything the extension remembers between visits, which is five choices and
  * nothing about any pull request.
  *
  * No finding, no thread id and no page is ever written to storage. What a
  * reader has read is a fact about a review and belongs to GitHub; what a reader
  * prefers is a fact about the extension, and is the only thing kept here.
+ *
+ * The tab the drawer is showing and which severity groups are folded shut are
+ * deliberately not here. Both are a position in one worklist rather than a
+ * preference about the extension, and carrying them to the next pull request
+ * would open its drawer on somebody else's place.
  */
 export interface Prefs {
   hideMode: HideMode
   sortAxis: SortAxis
+  /**
+   * Which way round the axis runs: the direction `SORT_DIRECTIONS` names first,
+   * or the other one. Stored beside the axis because the pair is one choice as
+   * the reader makes it, and an axis remembered without its direction would
+   * come back sorted the other way.
+   */
+  sortLeading: boolean
   drawerOpen: boolean
+  /**
+   * Which palette the panel draws itself in, which is the one preference that
+   * changes nothing but the panel: no thread is hidden or revealed by it, and
+   * no pass is run for it.
+   */
+  theme: Theme
 }
 
 /**
- * Safe mode, severity first, drawer shut.
+ * Safe mode, severity first and worst first, drawer shut, palette from the
+ * system.
  *
  * Also the answer whenever storage cannot be read, which is why the default is
  * the conservative one rather than the last one anybody chose: a failed read
  * must never widen what is hidden.
  */
-export const DEFAULT_PREFS: Prefs = { hideMode: 'safe', sortAxis: 'severity', drawerOpen: false }
+export const DEFAULT_PREFS: Prefs = {
+  hideMode: 'safe',
+  sortAxis: 'severity',
+  sortLeading: true,
+  drawerOpen: false,
+  theme: 'auto',
+}
 
 /** One key holding the whole record, so a read is one call and a write is one write. */
 const KEY = 'prefs'
@@ -34,7 +60,7 @@ const KEY = 'prefs'
  * Held rather than re-read, because a save is a click and a read is a round
  * trip to the extension process: merging against a fresh read is the same race
  * as merging against this one, with a slower loser. Two tabs writing different
- * preferences at once is last writer wins, which for three settings is what a
+ * preferences at once is last writer wins, which for five settings is what a
  * reader would expect anyway.
  */
 let current: Prefs = DEFAULT_PREFS
@@ -65,9 +91,9 @@ export async function loadPrefs(): Promise<Prefs> {
 /**
  * Write the given fields, leaving the rest as they are.
  *
- * Partial because the three settings are changed one at a time by three
- * different controls, and a caller that had to pass the whole record would be a
- * caller holding a copy of the other two.
+ * Partial because the settings are changed one at a time by different controls,
+ * and a caller that had to pass the whole record would be a caller holding a
+ * copy of the rest.
  *
  * Never rejects, for the reasons `loadPrefs` gives, and nothing waits on it:
  * the in-memory value is updated first, so the panel redraws on the click
@@ -105,7 +131,10 @@ function validate(value: unknown): Prefs {
   return {
     hideMode: isHideMode(stored.hideMode) ? stored.hideMode : DEFAULT_PREFS.hideMode,
     sortAxis: isSortAxis(stored.sortAxis) ? stored.sortAxis : DEFAULT_PREFS.sortAxis,
+    sortLeading:
+      typeof stored.sortLeading === 'boolean' ? stored.sortLeading : DEFAULT_PREFS.sortLeading,
     drawerOpen: typeof stored.drawerOpen === 'boolean' ? stored.drawerOpen : DEFAULT_PREFS.drawerOpen,
+    theme: isTheme(stored.theme) ? stored.theme : DEFAULT_PREFS.theme,
   }
 }
 
@@ -119,6 +148,11 @@ function isHideMode(value: unknown): value is HideMode {
  */
 function isSortAxis(value: unknown): value is SortAxis {
   return typeof value === 'string' && Object.hasOwn(SORT_LABELS, value)
+}
+
+/** The same rule as `isSortAxis`, against the settings sheet's own keys. */
+function isTheme(value: unknown): value is Theme {
+  return typeof value === 'string' && Object.hasOwn(THEME_LABELS, value)
 }
 
 /**

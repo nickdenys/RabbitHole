@@ -2,22 +2,50 @@ import type { TriageRow } from '../engine'
 import type { Severity } from '../types'
 
 /**
- * The five axes, complete as of B6. Severity and file shipped in A10; state,
- * category and effort are this step.
+ * The four axes, complete as of B6. Severity and file shipped in A10; category
+ * and effort are this step.
  *
  * The order here is the order the picker offers them in, which is the order
  * they were built in rather than an opinion about which is best: severity is
  * the default and stays first, and nothing below it claims a ranking.
  */
-export type SortAxis = 'severity' | 'file' | 'state' | 'category' | 'effort'
+export type SortAxis = 'severity' | 'file' | 'category' | 'effort'
 
 /** What the picker calls each axis, in the order it offers them. */
 export const SORT_LABELS: Record<SortAxis, string> = {
   severity: 'Severity',
   file: 'File',
-  state: 'State',
   category: 'Category',
   effort: 'Effort',
+}
+
+/**
+ * The half line the picker prints to the right of each axis, saying what
+ * picking it does rather than repeating its name.
+ *
+ * Two of them describe the shape of the result rather than the order: severity
+ * is what the drawer opens on, and category is the axis whose runs are long
+ * enough that the headings are the point.
+ */
+export const SORT_HINTS: Record<SortAxis, string> = {
+  severity: 'default',
+  file: 'a–z',
+  category: 'grouped',
+  effort: 'quick wins',
+}
+
+/**
+ * What the direction toggle is called on each axis, leading direction first.
+ *
+ * Spelled out per axis rather than as one pair of words, because "descending"
+ * means nothing on a worklist: the reader is choosing between quick wins first
+ * and heavy lifts first, and the control should say so.
+ */
+export const SORT_DIRECTIONS: Record<SortAxis, readonly [string, string]> = {
+  severity: ['Most important first', 'Least important first'],
+  file: ['A to Z', 'Z to A'],
+  category: ['A to Z', 'Z to A'],
+  effort: ['Quick wins first', 'Heavy lifts first'],
 }
 
 /**
@@ -26,9 +54,15 @@ export const SORT_LABELS: Record<SortAxis, string> = {
  * `label` is null for an axis that does not group, and the whole list arrives
  * as a single unlabelled group in that case, so the drawer has one shape to
  * render rather than two.
+ *
+ * `severity` is what the heading's dot is coloured from, and only the severity
+ * axis produces it: 'none' is a run of findings that state no severity, and
+ * null is any group that is not a severity group at all. A category heading has
+ * no colour to be, so it gets no dot rather than an arbitrary one.
  */
 export interface SortGroup {
   label: string | null
+  severity: Severity | 'none' | null
   rows: TriageRow[]
 }
 
@@ -47,19 +81,16 @@ const SEVERITY_RANK: Record<Severity, number> = {
 
 const UNKNOWN_SEVERITY = 4
 
-/**
- * The three states a reader triages by, worst-first in the sense of "still your
- * problem".
- *
- * Read off the thread and never off the finding, so this axis works on a thread
- * whose body could not be read at all. Outdated sits between the two because an
- * open finding on code that has since moved is real work with a strong chance
- * of being obsolete, and burying it under the resolved ones would hide it.
- *
- * Resolved is last rather than first because the drawer is a worklist. An
- * outdated thread that is also resolved is resolved: done outranks stale.
- */
-const STATE_LABELS = ['Open', 'Outdated', 'Resolved'] as const
+/** CodeRabbit's own words, capitalised, which is what a severity heading reads. */
+const SEVERITY_LABELS: Record<Severity, string> = {
+  critical: 'Critical',
+  major: 'Major',
+  minor: 'Minor',
+  trivial: 'Trivial',
+}
+
+/** The heading over rows whose triple was missing, phrased as the gap it is. */
+const NO_SEVERITY = 'No severity stated'
 
 /**
  * CodeRabbit's effort words, cheapest return first, lowercased for matching.
@@ -91,12 +122,20 @@ const NO_CATEGORY = 'No category stated'
  * `App` also counts the handle from: sorting in place would reorder the array
  * a sibling render is reading.
  *
+ * `leading` is the direction the axis names first in `SORT_DIRECTIONS`, and
+ * turning it off negates the comparator rather than reversing the result. The
+ * two are not the same thing: `Array.prototype.sort` is stable, so a reverse
+ * would also flip the rows that compared equal, and equal rows are in page
+ * order. Negating leaves the ties alone, so one file, one category or one
+ * effort still reads in the timeline's own sequence either way round.
+ *
  * Nothing is ever filtered here. Every row that goes in comes out, including
  * the ones with no severity, no file, no category and no effort, because a row
  * is the only place a hidden finding still exists.
  */
-export function sortRows(rows: TriageRow[], axis: SortAxis): TriageRow[] {
-  return [...rows].sort(COMPARATORS[axis])
+export function sortRows(rows: TriageRow[], axis: SortAxis, leading = true): TriageRow[] {
+  const compare = COMPARATORS[axis]
+  return [...rows].sort(leading ? compare : (a, b) => -compare(a, b))
 }
 
 /**
@@ -107,15 +146,15 @@ export function sortRows(rows: TriageRow[], axis: SortAxis): TriageRow[] {
  * sharing a label are one group, which is only the same thing as "all rows with
  * that label" because the caller sorted on the same axis first.
  *
- * Category and state group; severity, file and effort do not. Severity is
- * already legible from the coloured dot on every row, a file heading would
- * repeat the line each row already carries, and effort has three values across
- * every capture, so all three would be headings that add a line and say nothing
- * the row does not.
+ * Severity and category group; file and effort do not. Severity heads its runs
+ * because the drawer opens on it and a reader wants to see three blockers
+ * standing apart from ten nitpicks. A file heading would repeat the line each
+ * row already carries, and effort has three values across every capture, so
+ * both would add a line and say nothing the row does not.
  */
 export function groupRows(rows: TriageRow[], axis: SortAxis): SortGroup[] {
   const label = GROUP_LABELS[axis]
-  if (label === null) return rows.length === 0 ? [] : [{ label: null, rows }]
+  if (label === null) return rows.length === 0 ? [] : [{ label: null, severity: null, rows }]
 
   const groups: SortGroup[] = []
 
@@ -124,7 +163,7 @@ export function groupRows(rows: TriageRow[], axis: SortAxis): SortGroup[] {
     const last = groups.at(-1)
 
     if (last !== undefined && last.label === heading) last.rows.push(row)
-    else groups.push({ label: heading, rows: [row] })
+    else groups.push({ label: heading, severity: headingSeverity(row, axis), rows: [row] })
   }
 
   return groups
@@ -142,8 +181,8 @@ function bySeverity(a: TriageRow, b: TriageRow): number {
 }
 
 /**
- * Every other axis breaks its ties on severity, so one file, one state, one
- * category and one effort each read worst first.
+ * Every other axis breaks its ties on severity, so one file, one category and
+ * one effort each read worst first.
  */
 function then(compare: Comparator): Comparator {
   return (a, b) => compare(a, b) || bySeverity(a, b)
@@ -152,7 +191,6 @@ function then(compare: Comparator): Comparator {
 const COMPARATORS: Record<SortAxis, Comparator> = {
   severity: bySeverity,
   file: then((a, b) => compareText(a.thread.file, b.thread.file)),
-  state: then((a, b) => stateRank(a) - stateRank(b)),
   category: then((a, b) => compareText(a.finding?.category ?? null, b.finding?.category ?? null)),
   effort: then(byEffort),
 }
@@ -162,22 +200,26 @@ const COMPARATORS: Record<SortAxis, Comparator> = {
  * check rather than a list of axis names to keep in step with `SortAxis`.
  */
 const GROUP_LABELS: Record<SortAxis, ((row: TriageRow) => string) | null> = {
-  severity: null,
+  severity: (row) => severityLabel(row),
   file: null,
-  state: (row) => STATE_LABELS[stateRank(row)],
   category: (row) => row.finding?.category ?? NO_CATEGORY,
   effort: null,
+}
+
+/** The colour the heading's dot takes, which only the severity axis has one for. */
+function headingSeverity(row: TriageRow, axis: SortAxis): Severity | 'none' | null {
+  if (axis !== 'severity') return null
+  return row.finding?.severity ?? 'none'
+}
+
+function severityLabel(row: TriageRow): string {
+  const severity = row.finding?.severity
+  return severity == null ? NO_SEVERITY : SEVERITY_LABELS[severity]
 }
 
 function severityRank(row: TriageRow): number {
   const severity = row.finding?.severity
   return severity == null ? UNKNOWN_SEVERITY : SEVERITY_RANK[severity]
-}
-
-/** An index into `STATE_LABELS`, so the order and the headings cannot drift. */
-function stateRank(row: TriageRow): number {
-  if (row.thread.resolved) return 2
-  return row.thread.outdated ? 1 : 0
 }
 
 /**

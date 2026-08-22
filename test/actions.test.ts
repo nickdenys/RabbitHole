@@ -5,8 +5,9 @@ import {
   copyPrompt,
   forgetSessionFindings,
   resolveThread,
-  revealThread,
   sessionFinding,
+  showsInTimeline,
+  toggleInTimeline,
   unresolveThread,
 } from '../src/panel/actions'
 import { listedRows, unreadCount } from '../src/panel/rows'
@@ -478,7 +479,7 @@ describe('copyPrompt', () => {
   })
 })
 
-describe('revealThread', () => {
+describe('toggleInTimeline', () => {
   const HIDEABLE = `
     <div class="js-timeline-item">
       <div class="TimelineItem">
@@ -501,7 +502,7 @@ describe('revealThread', () => {
 
     expect(d.querySelectorAll(HIDDEN)).toHaveLength(1)
 
-    revealThread(rowOver(first))
+    expect(toggleInTimeline(rowOver(first))).toBe('shown')
 
     expect(first.closest(HIDDEN)).toBeNull()
     expect(scroll).toHaveBeenCalled()
@@ -514,19 +515,96 @@ describe('revealThread', () => {
     const [first, second] = [...d.querySelectorAll('review-thread-collapsible')]
     applyHiding([first, second], d)
 
-    revealThread(rowOver(first))
+    toggleInTimeline(rowOver(first))
 
     expect(second.closest(HIDDEN)).not.toBeNull()
   })
 
-  it('is only a scroll on a thread that was never hidden', () => {
+  // The second press, which is the whole point of the title being a toggle: a
+  // reader who looked at the thread on the page puts it back rather than
+  // leaving the timeline a little more cluttered with every row they check.
+  it('takes it back out on the next press', () => {
+    const d = doc(HIDEABLE)
+    const [first, second] = [...d.querySelectorAll('review-thread-collapsible')]
+    applyHiding([first, second], d)
+    const row = rowOver(first)
+
+    toggleInTimeline(row)
+    expect(toggleInTimeline(row)).toBe('hidden')
+
+    expect(first.closest(HIDDEN)).not.toBeNull()
+  })
+
+  // Back to the state the pass left, which for a review whose threads all went
+  // is the one hidden `.js-timeline-item` rather than two hidden threads.
+  it('collapses the review back into one hidden element', () => {
+    const d = doc(HIDEABLE)
+    const targets = [...d.querySelectorAll('review-thread-collapsible')]
+    applyHiding(targets, d)
+    const before = [...d.querySelectorAll(HIDDEN)].map((el) => el.className)
+
+    toggleInTimeline(rowOver(targets[0]))
+    toggleInTimeline(rowOver(targets[0]))
+
+    expect([...d.querySelectorAll(HIDDEN)].map((el) => el.className)).toEqual(before)
+  })
+
+  // Invariants 1 and 2 in the panel: the policy kept this thread in the
+  // timeline, and no press on a title may take it out. Both presses are a
+  // scroll, and neither is a hide.
+  it('never hides a thread the policy left in the timeline', () => {
     const d = doc(HIDEABLE)
     const first = d.querySelector('review-thread-collapsible') as Element
     const scroll = vi.spyOn(first, 'scrollIntoView')
+    const row = rowOver(first)
 
-    revealThread(rowOver(first))
+    expect(toggleInTimeline(row)).toBe('scrolled')
+    expect(toggleInTimeline(row)).toBe('scrolled')
 
     expect(d.querySelectorAll(HIDDEN)).toHaveLength(0)
-    expect(scroll).toHaveBeenCalled()
+    expect(scroll).toHaveBeenCalledTimes(2)
+  })
+
+  // A later pass may not undo a reveal, which is A7, and the toggle does not
+  // change that: only the reader's own second press does.
+  it('survives the passes that follow it', () => {
+    const d = doc(HIDEABLE)
+    const targets = [...d.querySelectorAll('review-thread-collapsible')]
+    applyHiding(targets, d)
+
+    const row = rowOver(targets[0])
+    toggleInTimeline(row)
+    applyHiding(targets, d)
+
+    expect(showsInTimeline(row)).toBe(true)
+  })
+})
+
+describe('showsInTimeline', () => {
+  it('reads the page rather than the verdict', () => {
+    const d = doc('<review-thread-collapsible id="thread-1">one</review-thread-collapsible>')
+    const el = d.querySelector('review-thread-collapsible') as Element
+
+    expect(showsInTimeline(rowOver(el))).toBe(true)
+
+    applyHiding([el], d)
+    expect(showsInTimeline(rowOver(el))).toBe(false)
+  })
+
+  // The class is on the item, not on the thread, so anything asking the element
+  // alone would call a hidden review visible.
+  it('sees a thread hidden by an ancestor', () => {
+    const d = doc(`
+      <div class="js-timeline-item">
+        <review-thread-collapsible id="thread-1">
+          <div class="timeline-comment-group">one</div>
+        </review-thread-collapsible>
+      </div>`)
+    const el = d.querySelector('review-thread-collapsible') as Element
+
+    applyHiding([el], d)
+
+    expect(el.classList.contains('crt-hidden')).toBe(false)
+    expect(showsInTimeline(rowOver(el))).toBe(false)
   })
 })

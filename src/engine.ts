@@ -73,10 +73,10 @@ export interface TriageState {
    */
   readResolved: () => void
   /**
-   * The reader's three choices, as of this pass. `hideMode` is the one the
-   * engine acts on; the other two are here because the panel is only ever given
-   * a state, and a second channel into it would be a second thing to keep in
-   * step with Turbo.
+   * The reader's four choices, as of this pass. `hideMode` is the one the
+   * engine acts on; the rest are here because the panel is only ever given a
+   * state, and a second channel into it would be a second thing to keep in step
+   * with Turbo.
    */
   prefs: Prefs
   /**
@@ -86,8 +86,8 @@ export interface TriageState {
    * The mode change is a pass rather than a scheduled one: it is a click, the
    * reader is looking at the timeline, and A7's rule that a pass owns the whole
    * hidden set is what makes it an ordinary recompute rather than an undo.
-   * Nothing else here touches the DOM, so the sort axis and the drawer's state
-   * are saved and no pass is run for them.
+   * Nothing else here touches the DOM, so the sort axis, the theme and the
+   * drawer's state are saved and no pass is run for them.
    */
   setPrefs: (prefs: Partial<Prefs>) => void
 }

@@ -1,5 +1,6 @@
+import { pullRequestKey } from '../detect'
 import type { TriageRow } from '../engine'
-import { reveal } from '../hide/apply'
+import { isHidden, reveal, unreveal } from '../hide/apply'
 import type { Finding } from '../types'
 
 /**
@@ -90,20 +91,117 @@ export function forgetSessionFindings(): void {
 }
 
 /**
- * Put a finding back on the page and scroll to it.
+ * What one press of the row's title did to the timeline.
+ *
+ *   'shown'     the thread was out of the timeline and is now in it, scrolled to
+ *   'hidden'    the reader had shown it, and it has gone back where it was
+ *   'scrolled'  nothing was hidden either way, so the page only moved
+ */
+export type TimelineToggle = 'shown' | 'hidden' | 'scrolled'
+
+/**
+ * Show this finding in the timeline, or put it back, and scroll to it whenever
+ * it ends up on screen.
  *
  * Reveal and scroll are one action because either alone is useless: a hidden
  * thread scrolled to is still not there, and a visible thread not scrolled to
- * is somewhere in a page of 148 threads. The reveal is permanent for the life
- * of the page, which is A7's rule, so a later pass cannot take it away again.
+ * is somewhere in a page of 148 threads. The reveal outlives every later pass,
+ * which is A7's rule.
  *
- * A row that was never hidden reaches here too, and the reveal is then a no-op
- * that leaves only the scroll. That is the point: one button that means "show
- * me this on the page", whatever the hide policy decided about it.
+ * **The direction is read off the page, never off the verdict.** A hidden
+ * thread can only be shown and a visible one can only be put back, and which of
+ * the two this is is a question about the class on the element right now: the
+ * verdict says what the policy wants, which is the opposite fact for exactly
+ * the threads the reader has already revealed.
+ *
+ * A row the policy never hid reaches here too, and then both halves are no-ops
+ * and the press is only a scroll. That is deliberate rather than tolerated: it
+ * means the title is one gesture that means "show me this on the page", and the
+ * panel can never hide a thread invariants 1 and 2 kept in the timeline.
  */
-export function revealThread(row: TriageRow): void {
-  reveal(row.thread.el)
-  row.thread.el.scrollIntoView({ block: 'center' })
+export function toggleInTimeline(row: TriageRow): TimelineToggle {
+  const el = row.thread.el
+
+  if (isHidden(el)) {
+    reveal(el)
+    el.scrollIntoView({ block: 'center' })
+    return 'shown'
+  }
+
+  unreveal(el)
+  if (isHidden(el)) return 'hidden'
+
+  el.scrollIntoView({ block: 'center' })
+  return 'scrolled'
+}
+
+/**
+ * Whether this finding is in the timeline right now, which is what the title's
+ * pressed state reports.
+ *
+ * Read on every render rather than remembered, because nothing tells the panel
+ * when it changes: the engine's observer watches insertions and removals, so
+ * taking a class off an element schedules no pass, and a remembered flag would
+ * survive GitHub swapping the thread partial underneath it.
+ */
+export function showsInTimeline(row: TriageRow): boolean {
+  return !isHidden(row.thread.el)
+}
+
+/**
+ * The same finding on the Files changed tab, or null when there is no way to
+ * name it.
+ *
+ * Two things have to be true, and neither is guaranteed. The permalink is read
+ * off the root comment's timestamp link and a pending comment has none, because
+ * an unsubmitted comment has no id to link to yet; and the URL has to be a pull
+ * request's, which it is not while Turbo is between pages. Null means the menu
+ * draws no item rather than a dead one.
+ *
+ * The fragment is pulled out rather than trusted whole. `readFinding` sees the
+ * bare `#discussion_r<id>` in all five fixtures, but a resolved thread's
+ * comments arrive from the deferred endpoint, where the same link could come
+ * back absolute, and appending an absolute URL to a path would produce
+ * something that resolves nowhere.
+ */
+export function filesChangedUrl(row: TriageRow, url: string = location.href): string | null {
+  const permalink = row.finding?.permalink
+  if (!permalink) return null
+
+  const key = pullRequestKey(url)
+  if (key === null) return null
+
+  const fragment = permalink.startsWith('#') ? permalink : hashOf(permalink, url)
+  return fragment === null ? null : `https://github.com/${key}/files${fragment}`
+}
+
+function hashOf(permalink: string, base: string): string | null {
+  try {
+    const hash = new URL(permalink, base).hash
+    return hash === '' ? null : hash
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Open this finding on the Files changed tab, in a tab of its own.
+ *
+ * A new tab rather than this one, because the drawer is a worklist and
+ * navigating away from it is throwing away the reader's place. `noopener` for
+ * the ordinary reason: the opened page has no business holding a reference back
+ * to a page it was opened from.
+ *
+ * False means there was no URL to open, which the menu already knows and is
+ * why it drew no item. It is still checked here rather than assumed, because
+ * the row it was drawn from is replaced on every pass.
+ */
+export function openInFiles(row: TriageRow, url: string = location.href): boolean {
+  const target = filesChangedUrl(row, url)
+  if (target === null) return false
+
+  window.open(target, '_blank', 'noopener')
+  return true
 }
 
 /**

@@ -7,54 +7,259 @@
   all: initial;
 }
 
+/*
+ * Primer's own tokens, each one a light value and a dark one, so the panel
+ * reads as part of the page it is pinned to rather than as something bolted on.
+ *
+ * Which half of every pair is drawn is decided by one property. `color-scheme`
+ * is `light dark` here, so the system's setting picks, and the theme setting
+ * below pins it to one of the two. One declaration rather than a second copy of
+ * the palette under a media query, which also means nothing can drift between
+ * the two themes: a token added in light is a token added in dark.
+ *
+ * The four severity hues are the exception: they are declared once and used in
+ * both themes. A finding's severity is the one thing in this panel that is
+ * about the review rather than about GitHub's chrome, and a reader who works in
+ * both themes should not have to learn two palettes for it.
+ */
 .panel {
-  --bg: #ffffff;
-  --fg: #1f2328;
-  --muted: #59636e;
-  --line: #d1d9e0;
-  --warn-bg: #9a6700;
-  --badge-bg: #eff2f5;
+  color-scheme: light dark;
 
-  font: 400 13px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --canvas: light-dark(#ffffff, #0d1117);
+  --layer: light-dark(#ffffff, #161b22);
+  --subtle: light-dark(#f6f8fa, #161b22);
+  --fg: light-dark(#1f2328, #e6edf3);
+  --muted: light-dark(#656d76, #8b949e);
+  --faint: light-dark(#6e7781, #6e7681);
+  --border: light-dark(#d0d7de, #30363d);
+  --line: light-dark(#d8dee4, #21262d);
+  --hover: light-dark(#eef1f4, #21262d);
+  --row-hover: light-dark(#f6f8fa, #0f141b);
+  --accent: light-dark(#0969da, #388bfd);
+  --green: light-dark(#1f883d, #3fb950);
+  --on-green: light-dark(#ffffff, #0d1117);
+  --tip-bg: light-dark(#24292f, #010409);
+  --tip-fg: light-dark(#ffffff, #f0f6fc);
+  --shadow: light-dark(rgba(31, 35, 40, 0.12), rgba(1, 4, 9, 0.55));
+  --shadow-strong: light-dark(rgba(31, 35, 40, 0.16), rgba(1, 4, 9, 0.8));
+  --attention-bg: light-dark(#fff8c5, #272115);
+  --attention-line: light-dark(#d4a72c, #9e6a03);
+  --attention-fg: light-dark(#4d2d00, #f2cc60);
+
+  --critical: #f85149;
+  --major: #f0883e;
+  --minor: #d29922;
+  --trivial: #58a6ff;
+
+  /*
+   * The category hues, which are a pair each, unlike the four above.
+   *
+   * Severity is four words a reader learns once and should not have to learn
+   * twice, so it is one value in both themes. A category dot is a five pixel
+   * grouping mark inside a bordered pill, and it has to hold its own against
+   * white as well as against #0d1117, so each one is Primer's darker hue on
+   * light and its lighter hue on dark.
+   */
+  --cat-correctness: light-dark(#0969da, #58a6ff);
+  --cat-maintainability: light-dark(#8250df, #a371f7);
+  --cat-performance: light-dark(#1b7c83, #39c5cf);
+  --cat-security: light-dark(#cf222e, #f85149);
+  --cat-stability: light-dark(#1a7f37, #3fb950);
+  --cat-data-integrity: light-dark(#bf3989, #db61a2);
+
+  font: 400 13px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
   color: var(--fg);
 }
 
-@media (prefers-color-scheme: dark) {
-  .panel {
-    --bg: #151b23;
-    --fg: #f0f6fc;
-    --muted: #9198a1;
-    --line: #3d444d;
-    --badge-bg: #262c36;
-  }
+/*
+ * The two themes that override the system rather than follow it. Auto is the
+ * declaration above and needs no rule of its own, which is why it is also what
+ * an unreadable stored preference falls back to.
+ *
+ * `color-scheme` rather than a class each rule has to know about: it picks the
+ * half of every `light-dark()` pair below the panel, and it is inherited, so
+ * the whole shadow tree including its scrollbars is themed by this one line.
+ */
+.panel.theme-light {
+  color-scheme: light;
 }
 
-/* The handle sits on the drawer's edge, so opening slides it left rather than
- * hiding it. It is the toggle, and the drawer's × is the same action. */
+.panel.theme-dark {
+  color-scheme: dark;
+}
+
+/* Every control starts from the same nothing, so each rule below only says how
+ * one differs rather than undoing a user agent first.
+ *
+ * Unscoped on purpose. Nothing in this sheet can reach past the shadow root, so
+ * there is nothing to qualify it against, and qualifying it anyway would make
+ * the reset (0,1,1) and every component rule below it (0,1,0): the reset would
+ * win, and every bordered control on the panel would lose its border. */
+button {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* CodeRabbit's mark, in its own orange rather than in a theme colour, because
+ * it is the one thing on the panel that says whose findings these are. */
+.mark {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 1px solid #f0883e59;
+  border-radius: 6px;
+  background: #f0883e1f;
+  color: #f0883e;
+  font: 600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* ---------------------------------------------------------------- the handle
+ *
+ * Closed it is a tab on the page's right edge carrying three things: the mark,
+ * the number still to do, and a meter of that number by severity, so three
+ * blockers and ten nitpicks do not look alike from across the screen. Hovering
+ * widens it into the sentence behind those three.
+ *
+ * Open it becomes the thin collapse tab on the drawer's own edge, which is the
+ * same button doing the same job from the other side. */
 .handle {
   position: fixed;
   top: 40%;
   right: 0;
   z-index: 2147483646;
-  padding: 8px 6px;
-  border: 0;
-  border-radius: 6px 0 0 6px;
-  background: #1f2328;
-  color: #fff;
-  font: 600 12px/1.2 inherit;
-  cursor: pointer;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-right: 0;
+  border-radius: 8px 0 0 8px;
+  background: var(--subtle);
+  color: var(--fg);
+  box-shadow: -6px 0 18px var(--shadow);
   user-select: none;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.handle:hover,
+.handle:focus-visible {
+  background: var(--hover);
 }
 
 .handle.warn {
-  background: var(--warn-bg);
+  border-color: var(--attention-line);
 }
 
-.panel.open .handle {
-  right: 380px;
+.handle-stack {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 8px;
 }
 
+.handle-count {
+  font: 600 13px/1 inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.handle-warn {
+  color: var(--attention-line);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.meter {
+  display: flex;
+  width: 24px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--hover);
+}
+
+.meter-part {
+  flex-basis: 0;
+  min-width: 1px;
+}
+
+/* Collapsed to nothing rather than absent, so the widening is one transition on
+ * one element instead of a second layout appearing beside the first. */
+.handle-label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 0;
+  padding: 0;
+  overflow: hidden;
+  opacity: 0;
+  white-space: nowrap;
+  transition:
+    max-width 160ms ease,
+    padding 160ms ease,
+    opacity 120ms ease;
+}
+
+.handle:hover .handle-label,
+.handle:focus-visible .handle-label {
+  max-width: 260px;
+  padding: 0 2px 0 12px;
+  opacity: 1;
+}
+
+.handle-title {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.handle-breakdown {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.handle-part {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}
+
+.handle-part .dot {
+  width: 6px;
+  height: 6px;
+  margin: 0;
+}
+
+.handle.collapsed {
+  right: 404px;
+  justify-content: center;
+  width: 24px;
+  height: 56px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.handle.collapsed:hover {
+  color: var(--fg);
+}
+
+/* ---------------------------------------------------------------- the drawer */
 .drawer {
   position: fixed;
   top: 0;
@@ -63,40 +268,209 @@
   z-index: 2147483645;
   display: flex;
   flex-direction: column;
-  width: 380px;
-  overflow-y: auto;
-  border-left: 1px solid var(--line);
-  background: var(--bg);
-  box-shadow: -2px 0 12px rgba(0, 0, 0, 0.15);
+  width: 404px;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+  background: var(--canvas);
+  box-shadow: -16px 0 40px var(--shadow);
 }
 
 .drawer-head {
-  position: sticky;
-  top: 0;
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
-  justify-content: space-between;
+  gap: 9px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--line);
-  background: var(--bg);
+}
+
+.drawer-head .mark {
+  width: 22px;
+  height: 22px;
 }
 
 .drawer-title {
+  flex: 1;
   margin: 0;
   font-size: 14px;
   font-weight: 600;
 }
 
-.close {
-  border: 0;
-  background: none;
+.icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
   color: var(--muted);
-  font-size: 20px;
+  font-size: 15px;
   line-height: 1;
-  cursor: pointer;
 }
 
+.icon:hover:not(:disabled),
+.icon.on {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.icon:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.drawer-tools {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs {
+  display: flex;
+  flex: 1;
+  gap: 6px;
+}
+
+.tab {
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.tab:hover {
+  color: var(--fg);
+}
+
+.tab.on {
+  border-color: var(--border);
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.tab-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Anchored to the button rather than to the panel, so the popover follows the
+ * toolbar instead of a measurement that has to be kept in step with it. */
+.sort {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.sort-button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.sort-button:hover,
+.sort-button.on {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.caret {
+  color: var(--faint);
+  font-size: 8px;
+}
+
+.sort-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 8;
+  width: 214px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--layer);
+  box-shadow: 0 14px 36px var(--shadow-strong);
+}
+
+.sort-menu-head {
+  margin: 0;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.sort-menu-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px;
+}
+
+.sort-menu-foot {
+  padding: 6px;
+  border-top: 1px solid var(--line);
+}
+
+.sort-option,
+.sort-direction {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.sort-option:hover,
+.sort-direction:hover {
+  background: var(--hover);
+}
+
+.sort-option.on,
+.sort-direction {
+  color: var(--fg);
+}
+
+.sort-check {
+  flex: 0 0 12px;
+  font-size: 10px;
+}
+
+.sort-option .sort-check {
+  color: var(--green);
+}
+
+.sort-direction .sort-check {
+  color: var(--muted);
+}
+
+.sort-option-label {
+  flex: 1;
+}
+
+.sort-option-hint {
+  color: var(--faint);
+  font-size: 10px;
+}
+
+/* ---------------------------------------------------------------- notices
+ *
+ * Above the list rather than in it, because both of them say the list below is
+ * incomplete, and a warning that scrolls away has stopped warning. */
 .notice {
+  flex: 0 0 auto;
   margin: 0;
   padding: 10px 14px;
   border-bottom: 1px solid var(--line);
@@ -105,8 +479,20 @@
 }
 
 .notice.warn {
-  color: #fff;
-  background: var(--warn-bg);
+  border-bottom-color: var(--attention-line);
+  background: var(--attention-bg);
+  color: var(--attention-fg);
+}
+
+.notice.reading {
+  border-top: 1px solid var(--line);
+  border-bottom: 0;
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .empty {
@@ -123,49 +509,63 @@
   font-weight: 600;
 }
 
-/* The picker sits between the notices and the list, so it reads as a control
- * over the rows below it rather than part of the header. */
-.sort {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border-bottom: 1px solid var(--line);
-}
-
-.sort-label {
+.empty-note {
+  margin: 0;
+  padding: 20px 14px;
   color: var(--muted);
   font-size: 12px;
 }
 
-.sort-select {
-  padding: 2px 4px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--fg);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-/* Sticky so a long run of one category or one state keeps saying which it is
+/* Sticky so a long run of one severity or one category keeps saying which it is
  * while the reader scrolls it, rather than only at the top. */
 .group-head {
   position: sticky;
   top: 0;
   z-index: 1;
   margin: 0;
-  padding: 6px 14px;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--line);
-  background: var(--bg);
+  background: var(--subtle);
   color: var(--muted);
   font-size: 11px;
-  font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
+.group-toggle:hover {
+  color: var(--fg);
+}
+
+.chevron {
+  flex: 0 0 9px;
+  font-size: 9px;
+}
+
+.group-toggle .dot {
+  width: 7px;
+  height: 7px;
+  margin: 0;
+}
+
+.group-label {
+  font-weight: 600;
+}
+
+.group-count {
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- the rows */
 .rows {
   margin: 0;
   padding: 0;
@@ -173,10 +573,102 @@
 }
 
 .row {
+  position: relative;
   display: flex;
-  gap: 8px;
-  padding: 10px 14px;
+  flex-direction: column;
+  gap: 5px;
+  padding: 11px 14px;
   border-bottom: 1px solid var(--line);
+}
+
+.row:hover {
+  background: var(--row-hover);
+}
+
+.row p {
+  margin: 0;
+}
+
+.row-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+/* The tick box is GitHub's resolve and unresolve, and nothing about it is
+ * optimistic: it fills in when a pass has read `data-resolved` off the page,
+ * never when the click was made. */
+.check {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--faint);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.check-tick {
+  opacity: 0;
+}
+
+.check:hover:not(:disabled) {
+  border-color: var(--green);
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  color: var(--green);
+}
+
+.check:hover:not(:disabled) .check-tick {
+  opacity: 1;
+}
+
+.check:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.row.done .check {
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--on-green);
+}
+
+.row.done .check-tick {
+  opacity: 1;
+}
+
+/* A button, because pressing it puts the finding back in the timeline and
+ * scrolls to it. It is styled as the line of text it was, so the row still
+ * reads as a sentence rather than as a control: the affordance is the hover
+ * underline and the pointer, which is what a title in a list is expected to
+ * carry anyway. */
+.row-title {
+  flex: 1;
+  min-width: 0;
+  padding-top: 1px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.row-title:hover {
+  text-decoration: underline;
+}
+
+/* The finding is out of the timeline and the reader put it back, so the title
+ * says which of its two states it is in. A left rule rather than a colour,
+ * because the colours on this row are severity's and this is not about the
+ * finding. */
+.row-title[aria-pressed='true'] {
+  margin-left: -8px;
+  padding-left: 6px;
+  border-left: 2px solid var(--accent);
 }
 
 .row.done .row-title {
@@ -184,70 +676,132 @@
   text-decoration: line-through;
 }
 
-.row-body {
-  min-width: 0;
-  flex: 1;
+.row.done .row-title:hover {
+  text-decoration: line-through underline;
 }
 
-.row p {
-  margin: 0;
+.row.done .row-meta,
+.row.done .row-pill {
+  opacity: 0.6;
 }
 
-.row-title {
-  overflow-wrap: anywhere;
-  font-weight: 500;
+.row-tools {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  margin: -3px -4px 0 0;
 }
 
-.row-file,
-.row-triple,
-.row-reason {
-  color: var(--muted);
+.row-tools .icon {
+  width: 24px;
+  height: 24px;
   font-size: 12px;
-  overflow-wrap: anywhere;
+}
+
+.row-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 27px;
 }
 
 .row-file {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* The triple's other two thirds, in one outline rather than as two lines.
+ *
+ * Category and effort arrive together and are both one short phrase, so a line
+ * each spent two thirds of the row's height on six words. Read as one pill they
+ * are what they are in CodeRabbit's own comment: two halves of the same
+ * sentence, divided by a rule instead of by a paragraph break.
+ *
+ * `flex` on the wrapper rather than `inline-flex` on the pill, so the outline
+ * ends where the words do instead of stretching to the drawer's edge. */
+.row-pill {
+  display: flex;
+  padding-top: 4px;
+  padding-left: 27px;
+}
+
+.pill {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+/* `--muted` is the category this table has no hue for, which is the same grey
+ * the words beside it are: an unmapped category stops being a colour without
+ * becoming a wrong one. */
+.pill-dot {
+  flex: 0 0 auto;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.pill-dot.correctness {
+  background: var(--cat-correctness);
+}
+
+.pill-dot.maintainability {
+  background: var(--cat-maintainability);
+}
+
+.pill-dot.performance {
+  background: var(--cat-performance);
+}
+
+.pill-dot.security {
+  background: var(--cat-security);
+}
+
+.pill-dot.stability {
+  background: var(--cat-stability);
+}
+
+.pill-dot.data-integrity {
+  background: var(--cat-data-integrity);
+}
+
+.pill-rule {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 9px;
+  background: var(--border);
+}
+
+.row-reason,
+.row-status,
+.row-badges {
+  padding-left: 27px;
 }
 
 .row-reason {
-  margin-top: 4px;
-  font-style: italic;
-}
-
-/* The actions sit under the description rather than beside it, because a 380px
- * drawer has no horizontal room left once the file path has had its share. */
-.row-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.action {
-  padding: 3px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--fg);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.action:hover:not(:disabled) {
-  background: var(--badge-bg);
-}
-
-.action:disabled {
   color: var(--muted);
-  cursor: default;
+  font-size: 12px;
+  font-style: italic;
+  overflow-wrap: anywhere;
 }
 
 /* Never green, never a tick. This line reports what a click did, and the done
- * state is the Resolved badge and the strikethrough, which come off the page. */
+ * state is the tick box and the strikethrough, which come off the page. */
 .row-status {
-  margin-top: 6px;
   color: var(--muted);
   font-size: 12px;
 }
@@ -256,47 +810,52 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 6px;
 }
 
 .badge {
   padding: 1px 6px;
   border-radius: 999px;
-  background: var(--badge-bg);
+  background: var(--hover);
   color: var(--muted);
   font-size: 11px;
 }
 
-.badge.unparsed {
-  background: var(--warn-bg);
-  color: #fff;
+.badge.unparsed,
+.badge.unfetched {
+  background: var(--attention-bg);
+  color: var(--attention-fg);
 }
 
 /* Severity as CodeRabbit's own four words. `none` is a finding with no triple,
  * which is a gap in the comment rather than a fifth severity. */
 .dot {
+  display: block;
   flex: 0 0 auto;
   width: 8px;
   height: 8px;
-  margin-top: 6px;
+  margin-top: 5px;
   border-radius: 50%;
   background: var(--muted);
 }
 
-.dot.critical {
-  background: #cf222e;
+.dot.critical,
+.meter-part.critical {
+  background: var(--critical);
 }
 
-.dot.major {
-  background: #bc4c00;
+.dot.major,
+.meter-part.major {
+  background: var(--major);
 }
 
-.dot.minor {
-  background: #9a6700;
+.dot.minor,
+.meter-part.minor {
+  background: var(--minor);
 }
 
-.dot.trivial {
-  background: #0969da;
+.dot.trivial,
+.meter-part.trivial {
+  background: var(--trivial);
 }
 
 .dot.none {
@@ -304,36 +863,261 @@
   box-shadow: inset 0 0 0 1px var(--muted);
 }
 
-/* Last in the drawer and shut by default, because it is read once and the
- * worklist is read every time. `margin-top: auto` puts it at the bottom of the
- * column rather than under the last row, so a short list does not leave it
- * floating in the middle. */
-.settings {
-  margin-top: auto;
+.meter-part.none {
+  background: var(--muted);
+}
+
+/* ---------------------------------------------------------------- the layers
+ *
+ * The worklist scrolls inside its own box, so a menu positioned against its row
+ * would be clipped by the rows above it. Both of these are `fixed` and placed
+ * from a measurement instead; see `overlay.ts`.
+ *
+ * The menu is drawn inside the drawer and the tooltip is not, which is a
+ * difference of reach rather than of kind. The menu hangs off the ⋯ at the
+ * drawer's right edge and stays inside it; the tooltip is centred on whatever
+ * it names, so on the leftmost control of a row it hangs past the drawer's left
+ * edge and over the collapse tab. The tab is a sibling of the drawer with a
+ * higher `z-index`, and the drawer's own `z-index` makes it a stacking context,
+ * so a tooltip inside the drawer is painted under the tab whatever number it
+ * carries. It is rendered from `App` beside the drawer for that one reason. */
+.menu {
+  position: fixed;
+  right: 18px;
+  z-index: 2147483647;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 262px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--layer);
+  box-shadow: 0 14px 36px var(--shadow-strong);
+}
+
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.menu-item:hover {
+  background: var(--hover);
+}
+
+.menu-icon {
+  flex: 0 0 14px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.menu-icon.tick {
+  color: var(--green);
+}
+
+.menu-rule {
+  display: block;
+  height: 1px;
+  margin: 4px 0;
+  background: var(--line);
+}
+
+.tip {
+  position: fixed;
+  z-index: 2147483647;
+  max-width: 320px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  background: var(--tip-bg);
+  color: var(--tip-fg);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  box-shadow: 0 6px 18px var(--shadow-strong);
+  transform: translate(-50%, calc(-100% - 6px));
+}
+
+/* ---------------------------------------------------------------- the footer */
+.drawer-foot {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
   border-top: 1px solid var(--line);
+  background: var(--subtle);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.progress-label {
+  white-space: nowrap;
+}
+
+.progress {
+  flex: 1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--hover);
+}
+
+.progress-bar {
+  display: block;
+  height: 100%;
+  background: var(--green);
+}
+
+.gear {
+  width: 30px;
+  height: 30px;
+  margin: -7px -7px -7px 2px;
+  font-size: 18px;
+}
+
+/* ---------------------------------------------------------------- settings
+ *
+ * A sheet over the worklist rather than a section under it, because the mode is
+ * read once and the list is read every time. It is always rendered so it slides
+ * rather than appears, and inert while it is off screen so nothing on it can be
+ * reached by the keyboard from the list behind. */
+.sheet {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  background: var(--canvas);
+  box-shadow: -16px 0 40px var(--shadow);
+  transform: translateX(100%);
+  transition: transform 300ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.sheet:not(.open) {
+  pointer-events: none;
+}
+
+.sheet.open {
+  transform: translateX(0);
+}
+
+.sheet-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 14px;
+  border: 0;
+}
+
+/* Two groups on one sheet, told apart by a line rather than by more air. The
+ * cards are already boxes, so a gap wide enough to separate the groups would
+ * read as two screens rather than one.
+ *
+ * Drawn under the group above rather than over the one below, because a
+ * fieldset's legend is laid out on its top border and would sit in the middle
+ * of the line. The bottom edge has no legend on it. */
+.settings:not(:last-child) {
+  border-bottom: 1px solid var(--line);
 }
 
 .settings-head {
-  padding: 8px 14px;
+  padding: 0 0 4px;
   color: var(--muted);
   font-size: 12px;
-  cursor: pointer;
+}
+
+.settings-value {
+  color: var(--fg);
+  font-weight: 600;
 }
 
 .setting {
   display: flex;
-  gap: 8px;
-  padding: 8px 14px 8px 16px;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
   cursor: pointer;
 }
 
+.setting:hover {
+  background: var(--subtle);
+}
+
+.setting.on {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+/* Off screen rather than `display: none`, so the radio keeps its role, its
+ * name and its place in the tab order and only its box is redrawn below. */
+.setting input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.setting-mark {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  border: 1px solid var(--muted);
+  border-radius: 50%;
+}
+
+.setting-mark::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.setting.on .setting-mark {
+  border-color: var(--accent);
+}
+
+.setting.on .setting-mark::after {
+  background: var(--accent);
+}
+
+.setting input:focus-visible + .setting-mark {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.setting-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
 .setting-label {
-  display: block;
-  font-weight: 500;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .setting-note {
-  display: block;
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.5;
+  text-wrap: pretty;
 }
