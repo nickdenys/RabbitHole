@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <rect
+    x="3" y="3" width="122" height="122" rx="32"
+    fill="#f0883e1f"
+    stroke="#f0883e59"
+    stroke-width="5.3"
+  />
+  <text
+    x="64" y="64"
+    text-anchor="middle"
+    dominant-baseline="central"
+    font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+    font-weight="600"
+    font-size="53"
+    fill="#f0883e"
+  >CR</text>
+</svg>
