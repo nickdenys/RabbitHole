@@ -1,17 +1,19 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
-  <rect
-    x="3" y="3" width="122" height="122" rx="32"
-    fill="#f0883e1f"
-    stroke="#f0883e59"
-    stroke-width="5.3"
-  />
-  <text
-    x="64" y="64"
-    text-anchor="middle"
-    dominant-baseline="central"
-    font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
-    font-weight="600"
-    font-size="53"
-    fill="#f0883e"
-  >CR</text>
+<!--
+  The source artwork for the toolbar icons beside this file. Solid tile, because
+  the browser's chrome is not ours to tint into: inside the panel the same glyph
+  wears the translucent treatment (see `Mark.tsx` and `.mark` in panel.css).
+
+  The rabbit is the worklist stood up: the two bars of unequal length splay into
+  ears, the drawer rail lies down under them as an arched head. One continuous
+  4.6-unit stroke, round caps and joins, one silhouette.
+
+  Below 20px the tile radius goes 7.5 -> 8 units and nothing else changes, which
+  is why icon16.png is rendered from a variant of this file rather than scaled
+  down from it. No stroke on the tile, no shadow, no gradient at any size.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 32 32">
+  <rect x="0" y="0" width="32" height="32" rx="7.5" fill="#e87722" />
+  <path d="M 10.4 7.8 L 12.3 21.8 M 21.6 7.8 L 19.7 21.8 M 8.4 23.6 Q 16 18.6 23.6 23.6"
+        fill="none" stroke="#ffffff" stroke-width="4.6"
+        stroke-linecap="round" stroke-linejoin="round" />
 </svg>

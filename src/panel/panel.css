@@ -111,20 +111,17 @@ button {
   outline-offset: 1px;
 }
 
-/* CodeRabbit's mark, in its own orange rather than in a theme colour, because
- * it is the one thing on the panel that says whose findings these are. */
+/* The product mark, in its own orange rather than in a theme colour, because
+ * it is the one thing on the panel that says whose findings these are. The
+ * tile is drawn inside the SVG, so the only thing left here is the box it sits
+ * in and the one colour the two themes disagree about: the glyph is darker on
+ * white than the tint's own #f0883e would be, which is the difference between
+ * a mark and a smudge at 22px. */
 .mark {
-  display: flex;
   flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
   width: 24px;
   height: 24px;
-  border: 1px solid #f0883e59;
-  border-radius: 6px;
-  background: #f0883e1f;
-  color: #f0883e;
-  font: 600 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: light-dark(#d9741f, #f0883e);
 }
 
 /* ---------------------------------------------------------------- the handle

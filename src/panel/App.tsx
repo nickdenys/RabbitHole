@@ -2,6 +2,7 @@ import { useState } from 'preact/hooks'
 import type { TriageRow, TriageState } from '../engine'
 import type { Severity } from '../types'
 import { Drawer } from './Drawer'
+import { Mark } from './Mark'
 import { Tips, useTip } from './overlay'
 import { listedRows } from './rows'
 import type { Theme } from './theme'
@@ -102,9 +103,7 @@ export function App({ state }: AppProps) {
             </span>
 
             <span class="handle-stack">
-              <span class="mark" aria-hidden="true">
-                CR
-              </span>
+              <Mark />
               <span class="handle-count">{readable ? todo.length : '—'}</span>
               {warn && (
                 <span class="handle-warn" aria-hidden="true">

@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'preact/hooks'
 import type { TriageRow, TriageState } from '../engine'
+import { Mark } from './Mark'
 import { useDismiss } from './overlay'
 import { Row } from './Row'
 import { emptyState, unreadCount, type EmptyState } from './rows'
@@ -102,9 +103,7 @@ export function Drawer({ state, listed, theme, onTheme, onClose }: DrawerProps) 
   return (
     <aside class="drawer" aria-label="CodeRabbit Triage">
       <header class="drawer-head">
-        <span class="mark" aria-hidden="true">
-          CR
-        </span>
+        <Mark />
         <h1 class="drawer-title">CodeRabbit Triage</h1>
         <button class="icon close" type="button" onClick={onClose} aria-label="Close CodeRabbit Triage">
           <span aria-hidden="true">×</span>
