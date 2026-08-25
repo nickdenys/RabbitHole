@@ -1,4 +1,5 @@
 import type { TriageRow } from './engine'
+import { hasLoadMore } from './loadmore'
 import type { CodeRabbitNote } from './parse/notes'
 
 /**
@@ -11,6 +12,8 @@ import type { CodeRabbitNote } from './parse/notes'
  * collapsed thread and no summaries.
  *
  * `missing` is the whole output. It is deliberately one sided, see `countCheck`.
+ * `more` is not part of the arithmetic at all: it is what the panel needs to
+ * tell a reader who can fix the gap from one who cannot.
  */
 export interface CountCheck {
   /** Sum of every `Actionable comments posted: N` on the page. */
@@ -19,9 +22,16 @@ export interface CountCheck {
   found: number
   /** How many of `claimed` are not in the page. Zero whenever nothing is wrong. */
   missing: number
+  /**
+   * Whether GitHub still has a "Load more" control in the page.
+   *
+   * Read only for the wording of the warning, never for `missing`: a shortfall
+   * is a shortfall whether or not anything can be done about it.
+   */
+  more: boolean
 }
 
-export const NO_CHECK: CountCheck = { claimed: null, found: 0, missing: 0 }
+export const NO_CHECK: CountCheck = { claimed: null, found: 0, missing: 0, more: false }
 
 /**
  * Whether the page holds every finding CodeRabbit says it posted.
@@ -49,12 +59,21 @@ export const NO_CHECK: CountCheck = { claimed: null, found: 0, missing: 0 }
  * the policy's word for a thread proven to be someone else's, and re-deriving
  * it here would be a second opinion that could disagree with the drawer's.
  */
-export function countCheck(notes: readonly CodeRabbitNote[], rows: readonly TriageRow[]): CountCheck {
+export function countCheck(
+  notes: readonly CodeRabbitNote[],
+  rows: readonly TriageRow[],
+  doc: Document,
+): CountCheck {
   const counted = notes.filter((note) => note.actionableCount !== null)
   const claimed = counted.length === 0 ? null : counted.reduce((sum, note) => sum + (note.actionableCount ?? 0), 0)
   const found = rows.filter(isCodeRabbitsOrUnknown).length
 
-  return { claimed, found, missing: claimed === null ? 0 : Math.max(0, claimed - found) }
+  return {
+    claimed,
+    found,
+    missing: claimed === null ? 0 : Math.max(0, claimed - found),
+    more: hasLoadMore(doc),
+  }
 }
 
 /**

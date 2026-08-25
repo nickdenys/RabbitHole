@@ -394,15 +394,16 @@ function runPass(
 
   applyHiding([...hideable.map((thread) => thread.el), ...notes.map((note) => note.el)], doc)
 
-  const check = countCheck(notes, rows)
+  const check = countCheck(notes, rows, doc)
 
   // Click GitHub's own "Load more" for the reader, never ours to fetch. The
   // click is itself a DOM mutation, so it needs no scheduling of its own: it
   // reaches the observer already watching this document and comes back around
   // as the next pass, which checks `missing` again against whatever GitHub
   // just rendered. A page with nothing missing, or nothing left to click,
-  // leaves this a no-op every time it runs.
-  if (prefs.autoLoadMore && check.missing > 0) clickLoadMore(doc)
+  // leaves this a no-op every time it runs: `check.more` is the second of
+  // those, already read by the check itself.
+  if (prefs.autoLoadMore && check.missing > 0 && check.more) clickLoadMore(doc)
 
   return {
     kind,

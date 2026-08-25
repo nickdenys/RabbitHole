@@ -30,22 +30,36 @@ function row(verdict: HideVerdict = { hide: true }): TriageRow {
 const rows = (n: number, verdict?: HideVerdict): TriageRow[] => Array.from({ length: n }, () => row(verdict))
 const human = rows(1, { hide: false, reason: 'not-coderabbit' })
 
+/** A page with nothing in it, which is every page here that is not a fixture. */
+const bare = (): Document => new DOMParser().parseFromString('<div></div>', 'text/html')
+
+/** The same, holding GitHub's own control in the shape it takes per review. */
+function withMoreControl(): Document {
+  const doc = bare()
+  doc.body.innerHTML =
+    '<form class="js-review-hidden-comment-ids ajax-pagination-form">' +
+    '<button type="submit">1 hidden conversation</button>' +
+    '<button type="submit" data-disable-with="Loading…">Load more…</button>' +
+    '</form>'
+  return doc
+}
+
 describe('countCheck', () => {
   it('says nothing at all when no summary carries a number', () => {
-    expect(countCheck([], rows(4))).toEqual({ claimed: null, found: 4, missing: 0 })
-    expect(countCheck([note(null)], rows(4))).toMatchObject({ claimed: null, missing: 0 })
+    expect(countCheck([], rows(4), bare())).toEqual({ claimed: null, found: 4, missing: 0, more: false })
+    expect(countCheck([note(null)], rows(4), bare())).toMatchObject({ claimed: null, missing: 0 })
   })
 
   it('sums every summary on the page', () => {
-    expect(countCheck([note(21), note(26), note(3)], rows(50)).claimed).toBe(50)
+    expect(countCheck([note(21), note(26), note(3)], rows(50), bare()).claimed).toBe(50)
   })
 
   it('ignores the walkthrough, which carries no number', () => {
-    expect(countCheck([note(null), note(4)], rows(4)).claimed).toBe(4)
+    expect(countCheck([note(null), note(4)], rows(4), bare()).claimed).toBe(4)
   })
 
   it('warns when the page holds fewer threads than CodeRabbit says it posted', () => {
-    expect(countCheck([note(27)], rows(3))).toEqual({ claimed: 27, found: 3, missing: 24 })
+    expect(countCheck([note(27)], rows(3), bare())).toEqual({ claimed: 27, found: 3, missing: 24, more: false })
   })
 
   /**
@@ -54,26 +68,50 @@ describe('countCheck', () => {
    * completely rendered and correct.
    */
   it('stays quiet when the page holds more threads than the total', () => {
-    expect(countCheck([note(102)], rows(103))).toMatchObject({ found: 103, missing: 0 })
+    expect(countCheck([note(102)], rows(103), bare())).toMatchObject({ found: 103, missing: 0 })
   })
 
   it('counts a thread nobody has read yet, rather than calling it missing', () => {
     const collapsed = rows(9, { hide: false, reason: 'collapsed' })
 
-    expect(countCheck([note(10)], [row(), ...collapsed]).missing).toBe(0)
+    expect(countCheck([note(10)], [row(), ...collapsed], bare()).missing).toBe(0)
   })
 
   it('does not count a thread proven to be somebody else s', () => {
-    expect(countCheck([note(10)], [...rows(10), ...human]).found).toBe(10)
-    expect(countCheck([note(10)], [...rows(9), ...human])).toMatchObject({ found: 9, missing: 1 })
+    expect(countCheck([note(10)], [...rows(10), ...human], bare()).found).toBe(10)
+    expect(countCheck([note(10)], [...rows(9), ...human], bare())).toMatchObject({ found: 9, missing: 1 })
   })
 
   it('never reports a negative shortfall', () => {
-    expect(countCheck([note(0)], rows(6)).missing).toBe(0)
+    expect(countCheck([note(0)], rows(6), bare()).missing).toBe(0)
+  })
+
+  /**
+   * The fact the warning's wording turns on, and the reason it is on the check
+   * rather than read again in the panel: a shortfall with no control in the
+   * page is CodeRabbit's own total being wrong, and telling the reader to click
+   * "Load more" sends them looking for a button GitHub never rendered.
+   *
+   * Observed 25 August 2026 on a private pull request: three reviews claiming
+   * 12, 4 and 10, twenty five threads in the page, no `ajax-pagination-form`
+   * anywhere, and the review claiming 12 holding eleven threads.
+   */
+  it('says whether GitHub still has a control in the page', () => {
+    expect(countCheck([note(26)], rows(25), bare()).more).toBe(false)
+    expect(countCheck([note(26)], rows(25), withMoreControl()).more).toBe(true)
+  })
+
+  it('reports the control even on a page that is not short, so nothing infers one from the other', () => {
+    expect(countCheck([note(25)], rows(25), withMoreControl())).toEqual({
+      claimed: 25,
+      found: 25,
+      missing: 0,
+      more: true,
+    })
   })
 
   it('is quiet on an empty page', () => {
-    expect(countCheck([], [])).toEqual(NO_CHECK)
+    expect(countCheck([], [], bare())).toEqual(NO_CHECK)
   })
 })
 
@@ -145,13 +183,13 @@ describe('the count check on a page GitHub has only half rendered', () => {
     const doc = loadFixture('resolvable')
     for (const thread of [...doc.querySelectorAll('review-thread-collapsible')].slice(2)) thread.remove()
 
-    expect(passOver(doc).check).toEqual({ claimed: 10, found: 2, missing: 8 })
+    expect(passOver(doc).check).toEqual({ claimed: 10, found: 2, missing: 8, more: false })
   })
 
   it('fires even when every thread is gone, because the summaries are the first chunk', () => {
     const doc = loadFixture('resolvable')
     for (const thread of doc.querySelectorAll('review-thread-collapsible')) thread.remove()
 
-    expect(passOver(doc).check).toEqual({ claimed: 10, found: 0, missing: 10 })
+    expect(passOver(doc).check).toEqual({ claimed: 10, found: 0, missing: 10, more: false })
   })
 })

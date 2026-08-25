@@ -129,11 +129,16 @@ const kept = (reason: Exclude<HideVerdict, { hide: true }>['reason']): HideVerdi
   reason,
 })
 
-/** A check that is warning: CodeRabbit said `claimed` and the page holds `found`. */
-const short = (claimed: number, found: number): CountCheck => ({
+/**
+ * A check that is warning: CodeRabbit said `claimed` and the page holds
+ * `found`, with GitHub's control still there unless a case says otherwise.
+ * That default is the older of the two shortfalls and the one most tests mean.
+ */
+const short = (claimed: number, found: number, more = true): CountCheck => ({
   claimed,
   found,
   missing: Math.max(0, claimed - found),
+  more,
 })
 
 /**
@@ -410,8 +415,31 @@ describe('the panel', () => {
     expect(notice?.textContent).toContain('CodeRabbit posted')
   })
 
+  it('sends the reader to GitHub s button while GitHub still has one', async () => {
+    const host = mount(stateOf([row()], { check: short(27, 3) }))
+    await click(host, '.handle')
+
+    expect(host.querySelector('.notice.warn')?.textContent).toContain('Load more')
+  })
+
+  /**
+   * The case this branch exists for. A page with no control left is CodeRabbit
+   * counting a finding it never posted, and the older wording sent the reader
+   * hunting for a button that was never rendered. Observed 25 August 2026,
+   * 25 findings in the page against a claimed 26.
+   */
+  it('never names a button on a page that has none, and says where the gap is instead', async () => {
+    const host = mount(stateOf([row()], { check: short(26, 25, false) }))
+    await click(host, '.handle')
+
+    const notice = host.querySelector('.notice.warn')
+    expect(notice?.textContent).toContain('Only 25 of the 26 findings')
+    expect(notice?.textContent).not.toContain('Load more')
+    expect(notice?.textContent).toContain("CodeRabbit's own total")
+  })
+
   it('does not warn when the page holds more findings than the total', async () => {
-    const host = mount(stateOf([row()], { check: { claimed: 102, found: 103, missing: 0 } }))
+    const host = mount(stateOf([row()], { check: { claimed: 102, found: 103, missing: 0, more: false } }))
 
     expect(host.querySelector('.handle')?.classList.contains('warn')).toBe(false)
     await click(host, '.handle')

@@ -14,6 +14,20 @@ import { MORE_CONTROL } from './hide/apply'
 const MORE_BUTTON = '[data-disable-with]'
 
 /**
+ * Whether GitHub is still holding anything back, in either shape of the
+ * control.
+ *
+ * The count check reads this, so that a shortfall the reader can do nothing
+ * about is not reported as one they can: with no control in the page there is
+ * no button to click, and telling them to click one sends them looking for
+ * something that is not there. Observed 25 August 2026 on a pull request whose
+ * three reviews claimed 26 findings and posted 25, with no form anywhere.
+ */
+export function hasLoadMore(doc: Document): boolean {
+  return doc.querySelector(MORE_CONTROL) !== null
+}
+
+/**
  * Click every "Load more" GitHub has rendered, so the reader never has to.
  *
  * Not a fetch of our own: GitHub's own handler is bound to this button and

@@ -166,11 +166,19 @@ export function Drawer({ state, listed, theme, onTheme, onClose }: DrawerProps) 
         </div>
       )}
 
+      {/* Two remedies, because there are two ways to be short. GitHub still
+          holding threads back is the reader's to fix and the button is where;
+          a page with no control left is CodeRabbit counting a finding it never
+          posted, which no clicking will ever close. Saying the first to a
+          reader in the second case sends them hunting for a button that is not
+          on the page. */}
       {state.check.missing > 0 && (
         <p class="notice warn">
-          Only {state.check.found} of the {state.check.claimed} findings CodeRabbit posted have
-          loaded. On a long conversation, GitHub hides the rest behind its own "Load more…" button
-          rather than loading it as you scroll, click that before trusting this list.
+          Only {state.check.found} of the {state.check.claimed} findings CodeRabbit posted are in
+          the page.{' '}
+          {state.check.more
+            ? 'On a long conversation, GitHub hides the rest behind its own "Load more…" button rather than loading it as you scroll, click that before trusting this list.'
+            : "Nothing is left to load, so the gap is in CodeRabbit's own total: it counts findings that never became threads here."}
         </p>
       )}
 
