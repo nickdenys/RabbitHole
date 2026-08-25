@@ -438,6 +438,29 @@ describe('the panel', () => {
     expect(notice?.textContent).toContain("CodeRabbit's own total")
   })
 
+  /**
+   * The handle and the drawer say different things about the same shortfall,
+   * on purpose. Nothing is left to load, so every finding CodeRabbit actually
+   * posted is in the list and the list is worth trusting: a triangle here
+   * would be a permanent one on a page with nothing wrong with it, which is
+   * how a warning stops meaning anything.
+   */
+  it('leaves the handle unmarked when the shortfall is CodeRabbit s own total', async () => {
+    const host = mount(stateOf([row()], { check: short(26, 25, false) }))
+
+    expect(host.querySelector('.handle')?.classList.contains('warn')).toBe(false)
+    expect(host.querySelector('.handle-warn')).toBeNull()
+    expect(host.querySelector('.handle')?.getAttribute('title')).not.toContain('not in the page')
+  })
+
+  it('still marks the handle when a thread is unreadable on that same page', async () => {
+    const host = mount(
+      stateOf([row({ verdict: kept('unparsed') })], { check: short(26, 25, false) }),
+    )
+
+    expect(host.querySelector('.handle')?.classList.contains('warn')).toBe(true)
+  })
+
   it('does not warn when the page holds more findings than the total', async () => {
     const host = mount(stateOf([row()], { check: { claimed: 102, found: 103, missing: 0, more: false } }))
 

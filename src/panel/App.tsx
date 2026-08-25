@@ -57,7 +57,12 @@ export function App({ state }: AppProps) {
   const readable = state.kind === 'classic'
   const listed = readable ? listedRows(state) : []
   const todo = listed.filter((row) => !row.thread.resolved)
-  const missing = readable ? state.check.missing : 0
+  // Only the shortfall the reader can act on. A page GitHub has half rendered
+  // is a list not to be trusted and the handle says so; a total CodeRabbit
+  // counted higher than it posted is a list holding every finding there is,
+  // and marking that handle teaches the triangle to mean nothing. The drawer's
+  // own notice still names both numbers either way, see `Drawer.tsx`.
+  const missing = readable && state.check.more ? state.check.missing : 0
   const warn = !readable || state.counts.unparsed > 0 || missing > 0
 
   return (
