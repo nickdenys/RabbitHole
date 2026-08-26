@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const KEY = 'enabled'
-const MENU_ID = 'coderabbit-triage-enabled'
+const MENU_ID = 'rabbithole-enabled'
 
 /**
  * A macrotask boundary, so every microtask a handler kicked off with a bare

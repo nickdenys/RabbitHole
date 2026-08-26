@@ -73,7 +73,7 @@ export function App({ state }: AppProps) {
             class="handle collapsed"
             type="button"
             onClick={() => show(false)}
-            title="Collapse the CodeRabbit Triage drawer"
+            title="Collapse the RabbitHole drawer"
             aria-expanded
           >
             <span aria-hidden="true">▶</span>
@@ -191,11 +191,11 @@ function headline(todo: number): string {
  * the title is incomplete.
  */
 function handleTitle(readable: boolean, todo: number, unparsed: number, missing: number): string {
-  if (!readable) return "CodeRabbit Triage: this GitHub build isn't supported yet. Nothing is hidden."
+  if (!readable) return "RabbitHole: this GitHub build isn't supported yet. Nothing is hidden."
 
   const parts = [`${todo} to go`]
   if (missing > 0) parts.push(`${missing} not in the page`)
   if (unparsed > 0) parts.push(`${unparsed} unreadable`)
 
-  return `CodeRabbit Triage: ${parts.join(', ')}`
+  return `RabbitHole: ${parts.join(', ')}`
 }

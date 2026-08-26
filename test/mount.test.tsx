@@ -5,7 +5,7 @@ import { updatePanel } from '../src/panel/mount'
 import { DEFAULT_PREFS } from '../src/prefs'
 import type { PageKind } from '../src/types'
 
-const HOST_ID = 'coderabbit-triage-root'
+const HOST_ID = 'rabbithole-root'
 
 const PR_URL = 'https://github.com/owner/repo/pull/1'
 

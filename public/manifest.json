@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "CodeRabbit Triage",
+  "name": "RabbitHole",
   "version": "0.1.0",
   "description": "Turns CodeRabbit review comments into a triage worklist on GitHub pull requests.",
   "permissions": ["storage", "contextMenus"],

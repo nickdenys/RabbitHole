@@ -5,8 +5,8 @@ import { scanNotes } from '../src/parse/notes'
 import { scanThreads } from '../src/parse/thread'
 import { loadFixture } from './support/fixture'
 
-const HIDDEN = '.crt-hidden'
-const STYLE_ID = 'coderabbit-triage-style'
+const HIDDEN = '.rh-hidden'
+const STYLE_ID = 'rabbithole-style'
 
 /**
  * The module keeps two pieces of state, the reveal set and the last applied
@@ -60,7 +60,7 @@ function doc(html: string): Document {
 
 function hidden(d: Document): string[] {
   return [...d.querySelectorAll(HIDDEN)].map(
-    (el) => el.id || el.className.replace('crt-hidden', '').trim(),
+    (el) => el.id || el.className.replace('rh-hidden', '').trim(),
   )
 }
 
@@ -258,7 +258,7 @@ describe('isHidden', () => {
 
     applyHiding(targets, d)
 
-    expect(targets[0].classList.contains('crt-hidden')).toBe(false)
+    expect(targets[0].classList.contains('rh-hidden')).toBe(false)
     expect(isHidden(targets[0])).toBe(true)
   })
 

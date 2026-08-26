@@ -1270,7 +1270,7 @@ describe('the preferences', () => {
 })
 
 describe('the title, which is the timeline toggle', () => {
-  const HIDDEN = '.crt-hidden'
+  const HIDDEN = '.rh-hidden'
 
   const title = (host: HTMLElement) => host.querySelector<HTMLElement>('.row-title')
   const pressed = (host: HTMLElement) => title(host)?.getAttribute('aria-pressed') ?? null
@@ -1648,13 +1648,13 @@ describe('the actions on a row', () => {
   it('shows the finding on the page and reveals it if it was hidden', async () => {
     const listed = row({ resolvable: true })
     document.body.append(listed.thread.el)
-    listed.thread.el.classList.add('crt-hidden')
+    listed.thread.el.classList.add('rh-hidden')
     const scroll = vi.spyOn(listed.thread.el, 'scrollIntoView')
 
     const host = await drawer(stateOf([listed]))
     await fromMenu(host, '.menu-item.reveal')
 
-    expect(listed.thread.el.classList.contains('crt-hidden')).toBe(false)
+    expect(listed.thread.el.classList.contains('rh-hidden')).toBe(false)
     expect(scroll).toHaveBeenCalled()
     listed.thread.el.remove()
   })

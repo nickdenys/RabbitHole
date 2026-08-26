@@ -21,7 +21,7 @@ export default defineConfig({
     lib: {
       entry: 'src/content.ts',
       formats: ['iife'],
-      name: 'coderabbitTriage',
+      name: 'rabbitHole',
       fileName: () => 'content.js',
     },
   },

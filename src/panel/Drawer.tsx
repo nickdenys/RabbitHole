@@ -101,11 +101,11 @@ export function Drawer({ state, listed, theme, onTheme, onClose }: DrawerProps) 
   const wholePage = unsupported || tab === 'open' ? empty : null
 
   return (
-    <aside class="drawer" aria-label="CodeRabbit Triage">
+    <aside class="drawer" aria-label="RabbitHole">
       <header class="drawer-head">
         <Mark />
-        <h1 class="drawer-title">CodeRabbit Triage</h1>
-        <button class="icon close" type="button" onClick={onClose} aria-label="Close CodeRabbit Triage">
+        <h1 class="drawer-title">RabbitHole</h1>
+        <button class="icon close" type="button" onClick={onClose} aria-label="Close RabbitHole">
           <span aria-hidden="true">×</span>
         </button>
       </header>

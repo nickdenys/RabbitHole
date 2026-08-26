@@ -15,7 +15,7 @@ import { scanThreads } from '../src/parse/thread'
 import type { Finding, Thread } from '../src/types'
 import { loadFixture } from './support/fixture'
 
-const HIDDEN = '.crt-hidden'
+const HIDDEN = '.rh-hidden'
 
 /**
  * Both modules under test keep page-lifetime state: `hide/apply` holds the
@@ -604,7 +604,7 @@ describe('showsInTimeline', () => {
 
     applyHiding([el], d)
 
-    expect(el.classList.contains('crt-hidden')).toBe(false)
+    expect(el.classList.contains('rh-hidden')).toBe(false)
     expect(showsInTimeline(rowOver(el))).toBe(false)
   })
 })

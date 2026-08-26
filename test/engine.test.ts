@@ -9,9 +9,9 @@ import {
 } from '../src/panel/actions'
 import { fixtureNames, loadFixture, loadFragment } from './support/fixture'
 
-const HIDDEN = '.crt-hidden'
-const STYLE_ID = 'coderabbit-triage-style'
-const PANEL_HOST_ID = 'coderabbit-triage-root'
+const HIDDEN = '.rh-hidden'
+const STYLE_ID = 'rabbithole-style'
+const PANEL_HOST_ID = 'rabbithole-root'
 
 const PR_URL = 'https://github.com/owner/repo/pull/1'
 const OTHER_PR = 'https://github.com/owner/repo/pull/2'

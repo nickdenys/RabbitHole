@@ -97,7 +97,7 @@ export interface TriageState {
 const SETTLE_MS = 150
 
 /** The two elements the extension puts in the light DOM. See `isOurs`. */
-const OUR_IDS = new Set(['coderabbit-triage-root', 'coderabbit-triage-style'])
+const OUR_IDS = new Set(['rabbithole-root', 'rabbithole-style'])
 
 /**
  * Run detect, scan, decide and apply, now and on every change, and hand the

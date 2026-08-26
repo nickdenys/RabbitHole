@@ -118,7 +118,7 @@ describe.each(NAMES)('%s', (name) => {
           doc,
         )
 
-        for (const el of doc.querySelectorAll('.crt-hidden')) {
+        for (const el of doc.querySelectorAll('.rh-hidden')) {
           for (const thread of el.querySelectorAll('review-thread-collapsible')) {
             expect(verdicts.get(thread)?.hide, `thread in ${el.className}`).toBe(true)
           }

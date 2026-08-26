@@ -17,9 +17,9 @@
  */
 
 /** Removing this class is the whole of reversal, so nothing of GitHub's is destroyed. */
-const HIDDEN_CLASS = 'crt-hidden'
+const HIDDEN_CLASS = 'rh-hidden'
 
-const STYLE_ID = 'coderabbit-triage-style'
+const STYLE_ID = 'rabbithole-style'
 
 const STYLE_TEXT = `.${HIDDEN_CLASS} { display: none !important }`
 

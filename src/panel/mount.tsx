@@ -3,7 +3,7 @@ import type { TriageState } from '../engine'
 import { App } from './App'
 import styles from './panel.css?inline'
 
-const HOST_ID = 'coderabbit-triage-root'
+const HOST_ID = 'rabbithole-root'
 
 let shadowRoot: ShadowRoot | null = null
 

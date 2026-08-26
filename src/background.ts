@@ -17,7 +17,7 @@
  */
 
 const KEY = 'enabled'
-const MENU_ID = 'coderabbit-triage-enabled'
+const MENU_ID = 'rabbithole-enabled'
 const BADGE_COLOR = '#8b1d1d'
 
 chrome().runtime.onInstalled.addListener(() => void sync())
