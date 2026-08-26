@@ -1,9 +1,9 @@
-import { useState } from 'preact/hooks'
+import { useLayoutEffect, useRef, useState } from 'preact/hooks'
 import type { TriageRow, TriageState } from '../engine'
 import type { Severity } from '../types'
 import { Drawer } from './Drawer'
 import { Mark } from './Mark'
-import { Tips, useTip } from './overlay'
+import { tipFitsAbove, Tips, useTip } from './overlay'
 import { listedRows } from './rows'
 import type { Theme } from './theme'
 
@@ -43,6 +43,30 @@ export function App({ state }: AppProps) {
   const [open, setOpen] = useState(state.prefs.drawerOpen)
   const [theme, setTheme] = useState<Theme>(state.prefs.theme)
   const [tip, tipFor] = useTip()
+  const tipEl = useRef<HTMLSpanElement | null>(null)
+
+  /**
+   * Which side of its control the tooltip ends up on, decided after it is
+   * drawn because deciding needs its height and its height is however many
+   * lines the sentence wrapped to.
+   *
+   * Written onto the element rather than held as state, so the tooltip is
+   * never painted on the wrong side for a frame on its way to the right one.
+   * Nothing is fighting for these two properties: preact owns this element's
+   * text and its `left`, and only this effect ever touches its `top` and the
+   * one class.
+   *
+   * Layout rather than plain, so the move lands in the same frame the tooltip
+   * first appears in.
+   */
+  useLayoutEffect(() => {
+    const el = tipEl.current
+    if (el === null || tip === null) return
+
+    const above = tipFitsAbove(tip.anchor, el.getBoundingClientRect().height)
+    el.classList.toggle('below', !above)
+    el.style.top = `${above ? tip.anchor.top : tip.anchor.bottom}px`
+  })
 
   function show(next: boolean): void {
     setOpen(next)
@@ -139,6 +163,7 @@ export function App({ state }: AppProps) {
           <span
             class="tip"
             role="tooltip"
+            ref={tipEl}
             style={{ left: `${tip.anchor.left}px`, top: `${tip.anchor.top}px` }}
           >
             {tip.text}

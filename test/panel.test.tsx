@@ -6,6 +6,7 @@ import { applyHiding, revealAll } from '../src/hide/apply'
 import type { HideVerdict } from '../src/hide/policy'
 import { forgetSessionFindings } from '../src/panel/actions'
 import { App } from '../src/panel/App'
+import { tipFitsAbove } from '../src/panel/overlay'
 import { badges, emptyState, keptReason, listedRows, unreadCount } from '../src/panel/rows'
 import { DEFAULT_PREFS } from '../src/prefs'
 import type { Finding, Thread, ThreadAuthors } from '../src/types'
@@ -396,7 +397,8 @@ describe('the panel', () => {
     expect(host.querySelector('.handle')?.classList.contains('warn')).toBe(true)
 
     await click(host, '.handle')
-    expect(host.querySelector('.notice.warn')?.textContent).toContain('1 thread could not be read')
+    await click(host, '.icon.warn')
+    expect(host.querySelector('.alert')?.textContent).toContain('1 thread could not be read')
   })
 
   it('warns on the handle when the page holds fewer findings than CodeRabbit posted', async () => {
@@ -406,20 +408,51 @@ describe('the panel', () => {
     expect(host.querySelector('.handle')?.getAttribute('title')).toContain('24 not in the page')
   })
 
-  it('names both numbers at the top of the drawer', async () => {
+  it('names both numbers, behind the header s triangle', async () => {
     const host = mount(stateOf([row()], { check: short(27, 3) }))
     await click(host, '.handle')
 
-    const notice = host.querySelector('.notice.warn')
-    expect(notice?.textContent).toContain('Only 3 of the 27 findings')
-    expect(notice?.textContent).toContain('CodeRabbit posted')
+    // Nothing above the list: the caveat costs a triangle until it is asked for.
+    expect(host.querySelector('.alert')).toBeNull()
+
+    await click(host, '.icon.warn')
+    const alert = host.querySelector('.alert')
+    expect(alert?.textContent).toContain('Only 3 of the 27 findings')
+    expect(alert?.textContent).toContain('CodeRabbit posted')
+    expect(host.querySelector('.alert-title')?.textContent).toBe('Findings may be missing')
+  })
+
+  /**
+   * The triangle is the whole of the header's cost when there is nothing to
+   * warn about, so the slot it lives in has to disappear with it.
+   */
+  it('leaves no triangle in the header on a page with nothing to say', async () => {
+    const host = await open(mount(stateOf([row()])))
+
+    expect(host.querySelector('.icon.warn')).toBeNull()
+    expect(host.querySelector('.signals')).toBeNull()
   })
 
   it('sends the reader to GitHub s button while GitHub still has one', async () => {
     const host = mount(stateOf([row()], { check: short(27, 3) }))
     await click(host, '.handle')
+    await click(host, '.icon.warn')
 
-    expect(host.querySelector('.notice.warn')?.textContent).toContain('Load more')
+    expect(host.querySelector('.alert')?.textContent).toContain('Load more')
+  })
+
+  // Deliberate open, deliberate close: the reader asked for the sentence, so
+  // it stays until they say they have read it.
+  it('closes the alert on "Got it", and puts the keyboard back on the triangle', async () => {
+    const host = mount(stateOf([row()], { check: short(27, 3) }))
+    await click(host, '.handle')
+    await click(host, '.icon.warn')
+
+    expect(document.activeElement).toBe(host.querySelector('.alert-ok'))
+
+    await click(host, '.alert-ok')
+    expect(host.querySelector('.alert')).toBeNull()
+    expect(document.activeElement).toBe(host.querySelector('.icon.warn'))
   })
 
   /**
@@ -432,10 +465,12 @@ describe('the panel', () => {
     const host = mount(stateOf([row()], { check: short(26, 25, false) }))
     await click(host, '.handle')
 
-    const notice = host.querySelector('.notice.warn')
-    expect(notice?.textContent).toContain('Only 25 of the 26 findings')
-    expect(notice?.textContent).not.toContain('Load more')
-    expect(notice?.textContent).toContain("CodeRabbit's own total")
+    await click(host, '.icon.warn')
+
+    const alert = host.querySelector('.alert')
+    expect(alert?.textContent).toContain('Only 25 of the 26 findings')
+    expect(alert?.textContent).not.toContain('Load more')
+    expect(alert?.textContent).toContain("CodeRabbit's own total")
   })
 
   /**
@@ -466,7 +501,7 @@ describe('the panel', () => {
 
     expect(host.querySelector('.handle')?.classList.contains('warn')).toBe(false)
     await click(host, '.handle')
-    expect(host.querySelector('.notice.warn')).toBeNull()
+    expect(host.querySelector('.icon.warn')).toBeNull()
   })
 
   /**
@@ -479,7 +514,8 @@ describe('the panel', () => {
     await click(host, '.handle')
 
     expect(host.querySelector('.empty-title')).toBeNull()
-    expect(host.querySelector('.notice.warn')?.textContent).toContain('Only 0 of the 27 findings')
+    await click(host, '.icon.warn')
+    expect(host.querySelector('.alert')?.textContent).toContain('Only 0 of the 27 findings')
   })
 
   it('does not claim "nothing left to do" over one either', async () => {
@@ -663,7 +699,11 @@ describe('the panel', () => {
     await click(host, '.handle')
 
     expect(host.querySelector('.rows')?.children).toHaveLength(1)
-    expect(host.textContent).toContain('Reading 1 resolved thread from GitHub')
+    // In the header rather than under the list, and with the number kept:
+    // "still working" without one says nothing about how far off the list is.
+    expect(host.querySelector('.signal-loader')?.getAttribute('aria-label')).toBe(
+      'Finding all issues on the page… 1 resolved thread still to read.',
+    )
   })
 
   // The other half of that, and the rule B3 exists for: a thread the fetch
@@ -680,8 +720,13 @@ describe('the panel', () => {
     expect(host.querySelector('.rows')?.children).toHaveLength(1)
     expect([...host.querySelectorAll('.badge')].map((b) => b.textContent)).toContain('Unfetched')
     expect(host.textContent).toContain('Left in the timeline: resolved, and its comments could not be fetched')
-    expect(host.textContent).toContain('1 thread could not be read')
-    expect(host.textContent).not.toContain('Reading')
+    expect(host.querySelector('.signal-loader')).toBeNull()
+
+    await click(host, '.icon.warn')
+    expect(host.querySelector('.alert')?.textContent).toContain('1 thread could not be read')
+    expect(host.querySelector('.alert-title')?.textContent).toBe(
+      'Some threads could not be read',
+    )
   })
 
   // Lazy on panel open, per [[Design decisions]]. The drawer is the only thing
@@ -1712,5 +1757,29 @@ describe.each(Object.entries(EXPECTED))('the drawer on %s', (name, expected) => 
 
     expect(open).toBe(expected.open)
     expect(open + done).toBe(expected.listed)
+  })
+})
+
+/**
+ * The tooltip is the one layer that prefers to sit above its control, which is
+ * fine everywhere except the place the two signal icons ended up: the drawer's
+ * header is twelve pixels from the top of the viewport, and a tooltip that
+ * could not flip was being drawn off the screen entirely.
+ */
+describe('which side of a control its tooltip sits on', () => {
+  it('flips below for a control in the drawer header', () => {
+    // The header's icons: 26px boxes, 12px of padding above them.
+    expect(tipFitsAbove({ left: 200, top: 14, bottom: 40 }, 24)).toBe(false)
+  })
+
+  it('stays above for a control down the worklist', () => {
+    expect(tipFitsAbove({ left: 200, top: 400, bottom: 426 }, 24)).toBe(true)
+  })
+
+  // The sentence on the spinner wraps to two lines at the drawer's width, so
+  // the height has to be the measured one rather than a single line assumed.
+  it('flips on height, not only on how far down the control is', () => {
+    expect(tipFitsAbove({ left: 200, top: 44, bottom: 70 }, 20)).toBe(true)
+    expect(tipFitsAbove({ left: 200, top: 44, bottom: 70 }, 40)).toBe(false)
   })
 })

@@ -1,7 +1,7 @@
-import { useLayoutEffect, useRef, useState } from 'preact/hooks'
+import { useContext, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import type { TriageRow, TriageState } from '../engine'
 import { Mark } from './Mark'
-import { useDismiss } from './overlay'
+import { Tips, useDismiss } from './overlay'
 import { Row } from './Row'
 import { emptyState, unreadCount, type EmptyState } from './rows'
 import { Settings } from './Settings'
@@ -55,10 +55,25 @@ export function Drawer({ state, listed, theme, onTheme, onClose }: DrawerProps) 
   // Only the folded ones are held, so a group that appears later opens by
   // default rather than inheriting a fold nobody asked for.
   const [folded, setFolded] = useState<Record<string, true>>({})
+  const [alertOpen, setAlertOpen] = useState(false)
 
   const sortButton = useRef<HTMLButtonElement | null>(null)
   const sortMenu = useRef<HTMLDivElement | null>(null)
   useDismiss(sortOpen, () => setSortOpen(false), sortMenu, sortButton)
+
+  const warnButton = useRef<HTMLButtonElement | null>(null)
+  const alertCard = useRef<HTMLDivElement | null>(null)
+  const alertOk = useRef<HTMLButtonElement | null>(null)
+  useDismiss(alertOpen, dismissAlert, alertCard, warnButton)
+
+  // Focus moves into the dialog as it opens, so the keyboard is not left on a
+  // triangle that is now behind a scrim. Layout rather than plain, so the move
+  // happens in the same frame the scrim is painted in.
+  useLayoutEffect(() => {
+    if (alertOpen) alertOk.current?.focus()
+  }, [alertOpen])
+
+  const tipFor = useContext(Tips)
 
   function chooseAxis(next: SortAxis): void {
     setAxis(next)
@@ -70,6 +85,26 @@ export function Drawer({ state, listed, theme, onTheme, onClose }: DrawerProps) 
     const next = !leading
     setLeading(next)
     state.setPrefs({ sortLeading: next })
+  }
+
+  /**
+   * Closing the alert, from the triangle, either of the dialog's own buttons,
+   * Escape, or a press outside it.
+   *
+   * Focus goes back to the triangle only while the dialog is holding it, so
+   * Escape and "Got it" return the keyboard to the control that opened the
+   * dialog and a press on the page behind leaves that press's own target
+   * alone. `activeElement` is read off the card's own root rather than off
+   * `document`, which retargets everything inside the shadow root to the host
+   * and would make every close look like the dialog had focus.
+   */
+  function dismissAlert(): void {
+    const card = alertCard.current
+    const root = card?.getRootNode() as (Node & DocumentOrShadowRoot) | undefined
+    const active = root?.activeElement ?? null
+
+    setAlertOpen(false)
+    if (card !== null && active !== null && card.contains(active)) warnButton.current?.focus()
   }
 
   // "Lazy, on panel open" in one line: this component exists only while the
@@ -94,6 +129,7 @@ export function Drawer({ state, listed, theme, onTheme, onClose }: DrawerProps) 
   const shown = tab === 'open' ? openRows : doneRows
   const unread = unreadCount(state)
   const groups = groupRows(sortRows(shown, axis, leading), axis)
+  const warnings = warningsOf(state)
 
   // The whole-page states outrank the tab, and only the Open tab draws the two
   // that are claims about the worklist: "nothing left to do" under a Resolved
@@ -105,6 +141,46 @@ export function Drawer({ state, listed, theme, onTheme, onClose }: DrawerProps) 
       <header class="drawer-head">
         <Mark />
         <h1 class="drawer-title">RabbitHole</h1>
+
+        {/* Two signals in one slot, and no slot at all when neither is
+            showing. Both are caveats about the list rather than parts of it:
+            a row above the worklist would spend a line of every session on a
+            sentence most sessions never need, and a warning nobody needs is a
+            warning nobody reads. */}
+        {(warnings.length > 0 || unread > 0) && (
+          <div class="signals">
+            {warnings.length > 0 && (
+              <button
+                class={alertOpen ? 'icon warn on' : 'icon warn'}
+                type="button"
+                ref={warnButton}
+                aria-haspopup="dialog"
+                aria-expanded={alertOpen}
+                aria-label="Something needs your attention"
+                {...tipFor('Something needs your attention')}
+                onClick={() => (alertOpen ? dismissAlert() : setAlertOpen(true))}
+              >
+                <span aria-hidden="true">⚠</span>
+              </button>
+            )}
+
+            {/* Not a button: there is nothing to do about a fetch in flight,
+                so it takes no tab stop and says its sentence to a pointer
+                through the tooltip and to a reader through its role. */}
+            {unread > 0 && (
+              <span
+                class="signal-loader"
+                role="status"
+                aria-label={readingLabel(unread)}
+                {...tipFor(readingLabel(unread))}
+              >
+                <span class="spinner" aria-hidden="true" />
+              </span>
+            )}
+          </div>
+        )}
+
+        <span class="head-gap" />
         <button class="icon close" type="button" onClick={onClose} aria-label="Close RabbitHole">
           <span aria-hidden="true">×</span>
         </button>
@@ -166,29 +242,6 @@ export function Drawer({ state, listed, theme, onTheme, onClose }: DrawerProps) 
         </div>
       )}
 
-      {/* Two remedies, because there are two ways to be short. GitHub still
-          holding threads back is the reader's to fix and the button is where;
-          a page with no control left is CodeRabbit counting a finding it never
-          posted, which no clicking will ever close. Saying the first to a
-          reader in the second case sends them hunting for a button that is not
-          on the page. */}
-      {state.check.missing > 0 && (
-        <p class="notice warn">
-          Only {state.check.found} of the {state.check.claimed} findings CodeRabbit posted are in
-          the page.{' '}
-          {state.check.more
-            ? 'On a long conversation, GitHub hides the rest behind its own "Load more…" button rather than loading it as you scroll, click that before trusting this list.'
-            : "Nothing is left to load, so the gap is in CodeRabbit's own total: it counts findings that never became threads here."}
-        </p>
-      )}
-
-      {state.counts.unparsed > 0 && (
-        <p class="notice warn">
-          {count(state.counts.unparsed, 'thread')} could not be read, so{' '}
-          {state.counts.unparsed === 1 ? 'it is' : 'they are'} still in the timeline.
-        </p>
-      )}
-
       {/* The menu is positioned against the viewport, so a list that scrolls
           under it would leave it hanging over the wrong row. */}
       <div class="list" onScroll={() => setMenuKey(null)}>
@@ -246,13 +299,6 @@ export function Drawer({ state, listed, theme, onTheme, onClose }: DrawerProps) 
             </section>
           )
         })}
-
-        {!unsupported && unread > 0 && (
-          <p class="notice reading">
-            Reading {count(unread, 'resolved thread')} from GitHub. GitHub does not render a
-            resolved thread's comments, so each one is fetched and listed as it arrives.
-          </p>
-        )}
       </div>
 
       {/* Not on a build the extension could not read, where nothing was hidden
@@ -301,6 +347,7 @@ export function Drawer({ state, listed, theme, onTheme, onClose }: DrawerProps) 
               <span aria-hidden="true">←</span>
             </button>
             <h2 class="drawer-title">Settings</h2>
+            <span class="head-gap" />
             <button
               class="icon close"
               type="button"
@@ -322,8 +369,101 @@ export function Drawer({ state, listed, theme, onTheme, onClose }: DrawerProps) 
           </div>
         </div>
       )}
+
+      {/* Last inside the drawer, and scoped to it, because what it says is
+          about this list. Deliberate open and deliberate close: the reader
+          asked for the sentence, so it is worth blocking the panel until they
+          have read it. */}
+      {alertOpen && (
+        <div class="scrim">
+          <div
+            class="alert"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="alert-title"
+            ref={alertCard}
+          >
+            <header class="alert-head">
+              <span class="alert-mark" aria-hidden="true">
+                ⚠
+              </span>
+              <h2 class="alert-title" id="alert-title">
+                {alertTitle(state)}
+              </h2>
+              <button class="icon" type="button" onClick={dismissAlert} aria-label="Close">
+                <span aria-hidden="true">×</span>
+              </button>
+            </header>
+
+            {warnings.map((text) => (
+              <p class="alert-text" key={text}>
+                {text}
+              </p>
+            ))}
+
+            <footer class="alert-foot">
+              <button class="alert-ok" type="button" ref={alertOk} onClick={dismissAlert}>
+                Got it
+              </button>
+            </footer>
+          </div>
+        </div>
+      )}
     </aside>
   )
+}
+
+/**
+ * What the header's triangle has to say, worst first.
+ *
+ * The shortfall gets two remedies, because there are two ways to be short.
+ * GitHub still holding threads back is the reader's to fix and the button is
+ * where; a page with no control left is CodeRabbit counting a finding it never
+ * posted, which no clicking will ever close. Saying the first to a reader in
+ * the second case sends them hunting for a button that is not on the page.
+ *
+ * Empty is the ordinary case, and an empty list is what keeps the triangle off
+ * the header entirely.
+ */
+function warningsOf(state: TriageState): string[] {
+  const said: string[] = []
+
+  if (state.check.missing > 0) {
+    const remedy = state.check.more
+      ? 'On a long conversation, GitHub hides the rest behind its own "Load more…" button rather than loading it as you scroll, click that before trusting this list.'
+      : "Nothing is left to load, so the gap is in CodeRabbit's own total: it counts findings that never became threads here."
+
+    said.push(
+      `Only ${state.check.found} of the ${state.check.claimed} findings CodeRabbit posted are in the page. ${remedy}`,
+    )
+  }
+
+  if (state.counts.unparsed > 0) {
+    const they = state.counts.unparsed === 1 ? 'it is' : 'they are'
+    said.push(
+      `${count(state.counts.unparsed, 'thread')} could not be read, so ${they} still in the timeline.`,
+    )
+  }
+
+  return said
+}
+
+/**
+ * The dialog's heading, which names the stronger of the two claims when both
+ * are being made. A shortfall is findings the drawer never got to list; an
+ * unreadable thread is listed, badged and still in the timeline, so calling
+ * that one "missing" would be the drawer accusing itself of the wrong fault.
+ */
+function alertTitle(state: TriageState): string {
+  return state.check.missing > 0 ? 'Findings may be missing' : 'Some threads could not be read'
+}
+
+/**
+ * The spinner's sentence. It keeps the number, because "still working" without
+ * one says nothing about whether the list is nearly right or barely started.
+ */
+function readingLabel(unread: number): string {
+  return `Finding all issues on the page… ${count(unread, 'resolved thread')} still to read.`
 }
 
 /**

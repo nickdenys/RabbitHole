@@ -98,6 +98,29 @@ export function useDismiss(
   }, [open])
 }
 
+/**
+ * How far a tooltip sits from the control it names. `panel.css` carries the
+ * same number in `.tip`'s two transforms; it is here as well because the
+ * choice between them is made by measuring rather than by CSS.
+ */
+export const TIP_GAP = 6
+
+/**
+ * Whether a tooltip fits above the control it names.
+ *
+ * A tooltip is the one layer on the panel that prefers above, because below is
+ * where the pointer already is; everything else hangs below and flips up, see
+ * `layerTop`. The drawer's header is twelve pixels from the top of the
+ * viewport, so for the two signal icons in it there is no above to prefer, and
+ * a tooltip that could not flip was drawn off the screen entirely.
+ *
+ * The height is measured by the caller rather than assumed here, because a
+ * tooltip is as tall as however many lines its sentence wrapped to.
+ */
+export function tipFitsAbove(anchor: Anchor, height: number): boolean {
+  return anchor.top - height - TIP_GAP >= FLIP_MARGIN
+}
+
 /** A tooltip that is showing: its words, and where the control it describes is. */
 export interface Tip {
   text: string
