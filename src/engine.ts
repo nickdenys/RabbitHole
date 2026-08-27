@@ -197,6 +197,14 @@ export function startEngine(
   }
 
   function schedule(records: MutationRecord[]): void {
+    // A pass is already coming, and it will read whatever these records did
+    // along with everything else, so there is nothing to learn from reading
+    // them. Ahead of `isOurs` rather than inside it, because the point is to
+    // not walk the batch at all: GitHub delivers mutations in bursts, and on a
+    // churning timeline that is thousands of records examined per settle
+    // window to reach a `schedulePass` that is already a no-op.
+    if (scheduled !== undefined) return
+
     if (records.every(isOurs)) return
     schedulePass()
   }
@@ -389,8 +397,11 @@ function runPass(
     })
   }
 
-  const verdicts = new Map<Thread, HideVerdict>(rows.map((row) => [row.thread, row.verdict]))
-  const hideable = threads.filter((thread) => verdicts.get(thread)?.hide)
+  // Read off the rows rather than through a `Thread`-keyed map of the same
+  // answers. The loop above pushes to both arrays together, so `rows[i].thread`
+  // *is* `threads[i]` and the map was a hash of every thread on the page built
+  // once a pass to look up something already sitting beside it.
+  const hideable = rows.filter((row) => row.verdict.hide).map((row) => row.thread)
 
   applyHiding([...hideable.map((thread) => thread.el), ...notes.map((note) => note.el)], doc)
 
@@ -414,9 +425,9 @@ function runPass(
     check,
     counts: {
       total: threads.length,
-      unresolved: threads.filter((thread) => !thread.resolved).length,
+      unresolved: count(threads, (thread) => !thread.resolved),
       hidden: hideable.length,
-      unparsed: threads.filter((thread) => isUnparsed(verdicts.get(thread))).length,
+      unparsed: count(rows, (row) => isUnparsed(row.verdict)),
     },
     readResolved,
     prefs,
@@ -469,9 +480,22 @@ const NO_COUNTS = { total: 0, unresolved: 0, hidden: 0, unparsed: 0 }
  * extension asked, GitHub did not answer, and there is nothing further coming
  * that would resolve it. That is exactly what the handle's warning is for.
  */
-function isUnparsed(verdict: HideVerdict | undefined): boolean {
-  if (verdict === undefined || verdict.hide) return false
+function isUnparsed(verdict: HideVerdict): boolean {
+  if (verdict.hide) return false
   return verdict.reason === 'unparsed' || verdict.reason === 'fetch-failed'
+}
+
+/**
+ * How many of them match, without the array of the ones that did.
+ *
+ * `filter(...).length` is the same answer through a copy of every matching
+ * element, which for the counts above is two arrays a pass that nothing ever
+ * reads. `hidden` still filters, because there the list is the point.
+ */
+function count<T>(items: readonly T[], matches: (item: T) => boolean): number {
+  let n = 0
+  for (const item of items) if (matches(item)) n++
+  return n
 }
 
 /**
@@ -493,8 +517,17 @@ function isUnparsed(verdict: HideVerdict | undefined): boolean {
 function isOurs(record: MutationRecord): boolean {
   if (record.removedNodes.length > 0) return false
 
-  const added = [...record.addedNodes]
-  return added.length > 0 && added.every(isOurNode)
+  // Walked in place. Copying the `NodeList` out first is an array per record,
+  // and a burst that inserts a chunk of timeline is one record per node: the
+  // allocations outnumbered the nodes they were made to look at.
+  const added = record.addedNodes
+  if (added.length === 0) return false
+
+  for (const node of added) {
+    if (!isOurNode(node)) return false
+  }
+
+  return true
 }
 
 function isOurNode(node: Node): boolean {

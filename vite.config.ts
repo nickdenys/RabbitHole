@@ -17,7 +17,16 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: false,
     target: 'es2022',
-    minify: false,
+    // The manifest matches all of github.com, so this script is fetched and
+    // parsed on every page a reader opens there and not only on pull requests.
+    // Unminified it is 197.6 kB against 65.5 kB, which is the one cost in this
+    // extension a reader pays without ever opening the panel.
+    //
+    // The sourcemap is what makes that affordable while the extension is still
+    // developed unpacked: DevTools shows `src/` rather than one line of
+    // mangled names, and `content.js.map` is only fetched when they are open.
+    minify: true,
+    sourcemap: true,
     lib: {
       entry: 'src/content.ts',
       formats: ['iife'],

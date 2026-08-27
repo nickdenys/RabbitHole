@@ -113,8 +113,14 @@ export function scanNotes(doc: Document): CodeRabbitNote[] {
     if (group.closest(THREAD) !== null) continue
     if (!isCodeRabbits(group)) continue
 
-    const actionableCount = readActionableCount(group)
-    const kind = readKind(group, actionableCount)
+    // Read once and handed to both markers. Each of them used to ask the
+    // group for its bodies itself, which is a subtree query per note per pass
+    // for an answer that cannot have changed in between: the two calls run
+    // back to back on the same element.
+    const bodies = commentBodies(group)
+
+    const actionableCount = readActionableCount(bodies)
+    const kind = readKind(bodies, actionableCount)
     if (kind === null) continue
 
     notes.push({
@@ -135,8 +141,8 @@ export function scanNotes(doc: Document): CodeRabbitNote[] {
  * fixture does. It is the more specific claim, and `actionableCount` is
  * reported either way, so nothing is lost by the choice.
  */
-function readKind(group: Element, actionableCount: number | null): CodeRabbitNote['kind'] | null {
-  if (hasWalkthroughMarker(group)) return 'walkthrough'
+function readKind(bodies: Element[], actionableCount: number | null): CodeRabbitNote['kind'] | null {
+  if (hasWalkthroughMarker(bodies)) return 'walkthrough'
   return actionableCount === null ? null : 'summary'
 }
 
@@ -154,16 +160,16 @@ function isCodeRabbits(group: Element): boolean {
   return links[0].getAttribute('href')?.trim() === CODERABBIT_HREF
 }
 
-function hasWalkthroughMarker(group: Element): boolean {
-  return bodies(group).some((body) =>
+function hasWalkthroughMarker(bodies: Element[]): boolean {
+  return bodies.some((body) =>
     [...body.querySelectorAll(WALKTHROUGH_MARKER)].some((el) =>
       WALKTHROUGH_TEXT.test(el.textContent?.trim() ?? ''),
     ),
   )
 }
 
-function readActionableCount(group: Element): number | null {
-  for (const body of bodies(group)) {
+function readActionableCount(bodies: Element[]): number | null {
+  for (const body of bodies) {
     for (const el of body.querySelectorAll('strong')) {
       const digits = el.textContent?.trim().match(ACTIONABLE_LINE)?.[1]
       if (digits !== undefined) return Number(digits)
@@ -181,6 +187,6 @@ function readActionableCount(group: Element): number | null {
  * write to, GitHub renders an 18 character `.comment-body` template for the
  * suggested changes control alongside the real one.
  */
-function bodies(group: Element): Element[] {
+function commentBodies(group: Element): Element[] {
   return [...group.querySelectorAll(COMMENT_BODY)]
 }

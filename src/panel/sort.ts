@@ -244,16 +244,28 @@ function effortRank(effort: string | null): number {
 }
 
 /**
+ * One collator, built once, rather than the one `localeCompare` builds per
+ * call.
+ *
+ * `a.localeCompare(b, 'en')` is this comparison, and engines are free to
+ * construct a collator for the locale on every call to it. Sorting the
+ * worklist on file, category or effort is a comparison per step of the sort,
+ * so a hundred rows is several hundred of them, on every render that changes
+ * the axis. Identical answers: a fixed locale and no options either way.
+ */
+const COLLATOR = new Intl.Collator('en')
+
+/**
  * A missing value sorts last for the same reason a missing severity does: it is
  * a thread that could not be fully described, not a thread that stops existing.
  *
- * `localeCompare` with a fixed locale rather than `<`, so `README.md` and
- * `src/app.ts` group the way a file list reads instead of by code point, and so
- * the result does not move with the machine's locale.
+ * Collated with a fixed locale rather than compared with `<`, so `README.md`
+ * and `src/app.ts` group the way a file list reads instead of by code point,
+ * and so the result does not move with the machine's locale.
  */
 function compareText(a: string | null, b: string | null): number {
   if (a === b) return 0
   if (a === null) return 1
   if (b === null) return -1
-  return a.localeCompare(b, 'en')
+  return COLLATOR.compare(a, b)
 }
