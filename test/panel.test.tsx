@@ -19,6 +19,15 @@ beforeAll(() => {
 })
 
 /**
+ * Every pass now asks GitHub for the collapsed threads it can see, and the
+ * fixtures are full of them, so a test that starts an engine touches the
+ * network whether it means to or not. The default is a request that never
+ * answers: the page reads exactly as it did before any fragment landed, which
+ * is the state these cases were written against.
+ */
+beforeAll(() => vi.stubGlobal('fetch', () => new Promise(() => {})))
+
+/**
  * What GitHub rendered inside the thread, which is what every action reaches
  * for.
  *
@@ -178,7 +187,6 @@ function stateOf(rows: TriageRow[], over: Partial<TriageState> = {}): TriageStat
       ).length,
     },
     // Overridden by the cases that assert the drawer asks for the fetch.
-    readResolved: () => {},
     // The defaults, so every case below draws a safe mode drawer sorted by
     // severity unless it says otherwise, and no case writes to storage.
     prefs: DEFAULT_PREFS,
@@ -401,11 +409,61 @@ describe('the panel', () => {
     expect(host.querySelector('.alert')?.textContent).toContain('1 thread could not be read')
   })
 
+  it('spins on the handle while the resolved threads are still being read', () => {
+    const collapsed = row({ thread: { collapsed: true, resolved: true }, verdict: kept('collapsed') })
+    const host = mount(stateOf([row(), collapsed]))
+
+    // Over the three things rather than beside them, and they stay drawn: the
+    // count and the meter are true about what has been read so far.
+    expect(host.querySelector('.handle-loader .spinner')).not.toBeNull()
+    expect(host.querySelector('.handle-stack')?.classList.contains('loading')).toBe(true)
+    expect(handleCount(host)).toBe('1')
+    expect(host.querySelector('.handle')?.getAttribute('title')).toContain('1 still to read')
+  })
+
+  it('stops spinning once nothing is left in flight', () => {
+    const host = mount(stateOf([row()]))
+
+    expect(host.querySelector('.handle-loader')).toBeNull()
+    expect(host.querySelector('.handle-stack')?.classList.contains('loading')).toBe(false)
+    expect(host.querySelector('.handle')?.getAttribute('title')).not.toContain('still to read')
+  })
+
   it('warns on the handle when the page holds fewer findings than CodeRabbit posted', async () => {
-    const host = mount(stateOf([row()], { check: short(27, 3) }))
+    // Auto "Load more" off, so nothing is going to close this gap on its own
+    // and the shortfall is the reader's to act on. See the case below.
+    const prefs = { ...DEFAULT_PREFS, autoLoadMore: false }
+    const host = mount(stateOf([row()], { check: short(27, 3), prefs }))
 
     expect(host.querySelector('.handle')?.classList.contains('warn')).toBe(true)
     expect(host.querySelector('.handle')?.getAttribute('title')).toContain('24 not in the page')
+  })
+
+  /**
+   * The flicker this suppression exists for. A long pull request opens claiming
+   * 102 findings and holding 13, because GitHub renders the timeline in chunks
+   * and CodeRabbit's summary is in the first one. With auto "Load more" on, the
+   * engine is already clicking through it, so the shortfall is real, large, and
+   * about to close itself. A triangle that appears on every long page and then
+   * takes itself back is a triangle nobody reads.
+   */
+  it('says nothing on the handle about a shortfall it is still loading away', () => {
+    const host = mount(stateOf([row()], { check: short(27, 3) }))
+
+    expect(host.querySelector('.handle')?.classList.contains('warn')).toBe(false)
+    expect(host.querySelector('.handle-warn')).toBeNull()
+    expect(host.querySelector('.handle')?.getAttribute('title')).not.toContain('not in the page')
+  })
+
+  it('says nothing on the handle while the resolved threads are still being read', () => {
+    const collapsed = row({ thread: { collapsed: true, resolved: true }, verdict: kept('collapsed') })
+    const host = mount(stateOf([row({ authors: null, verdict: kept('unparsed') }), collapsed]))
+
+    // The unreadable thread is a real fact and the drawer still names it. The
+    // handle waits until the fetch is done to decide whether it is still one:
+    // an answer that lands is a row that stops being unreadable.
+    expect(host.querySelector('.handle')?.classList.contains('warn')).toBe(false)
+    expect(host.querySelector('.handle-loader')).not.toBeNull()
   })
 
   it('names both numbers, behind the header s triangle', async () => {
@@ -727,18 +785,6 @@ describe('the panel', () => {
     expect(host.querySelector('.alert-title')?.textContent).toBe(
       'Some threads could not be read',
     )
-  })
-
-  // Lazy on panel open, per [[Design decisions]]. The drawer is the only thing
-  // that ever asks, so a reader who never opens it costs GitHub nothing.
-  it('asks for the resolved threads only once the drawer is open', async () => {
-    const readResolved = vi.fn()
-    const host = mount(stateOf([row()], { readResolved }))
-
-    expect(readResolved).not.toHaveBeenCalled()
-
-    await click(host, '.handle')
-    expect(readResolved).toHaveBeenCalled()
   })
 
   it('tells "no findings" and "nothing left to do" apart', async () => {

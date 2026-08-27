@@ -27,7 +27,7 @@ Number 3 exists because GitHub is rewriting the Conversation page in React. On a
 Everything reads the rendered page. No API token, no backend, and the only permissions are `storage` and `contextMenus`, the latter for the toolbar toggle below.
 
 * **Unresolved threads are already in the page**, so your actual worklist costs zero network requests.
-* **Resolved threads are collapsed** and show no author, so they are fetched lazily on panel open (six at a time) through GitHub's own deferred thread endpoint, using your session cookie. Private repos work without a token. The response is parsed with `DOMParser` and never injected: the panel renders text, so no sanitizer is needed. A thread whose fetch fails is listed as unreadable and stays in the timeline, because a finding nobody could read is exactly what must never disappear quietly.
+* **Resolved threads are collapsed** and show no author, so they are fetched as soon as the page settles (six at a time) through GitHub's own deferred thread endpoint, using your session cookie. This used to wait for the drawer to be opened. Starting with the page means the answers are usually already in by the time you open it, at the cost of asking GitHub on every pull request you visit rather than only the ones you triage. Private repos work without a token. The response is parsed with `DOMParser` and never injected: the panel renders text, so no sanitizer is needed. A thread whose fetch fails is listed as unreadable and stays in the timeline, because a finding nobody could read is exactly what must never disappear quietly.
 * **Severity, category and effort** come from CodeRabbit's emoji prefixed triple, the first three `em` elements of the comment body. Read by position and requires the emoji, so prose that happens to say "Major" never matches.
 * **Resolve and unresolve click GitHub's own buttons.** Done state is GitHub's `data-resolved`, never local bookkeeping. A click only means the click happened: the row's tick box stays empty and the row stays under Open until a pass confirms it on the page, and the row says so rather than striking a finding through on hope. GitHub renders the button for write access, not for a session, so a row on a repository you cannot write to says that instead.
 
@@ -65,7 +65,7 @@ It is stored on its own, separately from the mode, sort, theme and load preferen
 
 **v0.2 adds the network half**, which is everything that needs GitHub's deferred thread endpoint or a stored preference. It is done.
 
-* Fetch resolved threads on panel open, so they list as findings rather than as a count (done)
+* Fetch resolved threads, so they list as findings rather than as a count (done; on panel open at the time, and with the page now)
 * Unresolve, through GitHub's own button (done)
 * The count check: compare CodeRabbit's own "Actionable comments posted: N" against the threads found, and warn when the page holds fewer (done)
 * Sort by category and effort, with grouped headers where a flat list would read as noise (done)
@@ -82,6 +82,8 @@ It is stored on its own, separately from the mode, sort, theme and load preferen
 * A checkbox on the toolbar icon's right click menu, backed by its own `chrome.storage.local` key so the background worker never has to merge onto the panel's preferences record (done)
 * Flipping it stops or restarts the content script's engine outright in every open tab, live, rather than waiting for a reload (done)
 * An `OFF` badge on the icon mirrors the checkbox so the state reads without opening the menu (done)
+
+**The deferred fetch then moved off the drawer and onto the page.** Every pass asks for the collapsed threads it has no answer for yet, so the first pass of a pull request is the one that asks and the drawer opens on rows that are already filled in. The trade is deliberate: the extension now asks GitHub about every pull request the reader opens, rather than only the ones they triage. Nothing else moved. The first state is still published before the first request is started, so the count and the meter are never behind the network.
 
 ## Development
 

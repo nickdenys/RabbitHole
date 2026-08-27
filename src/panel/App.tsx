@@ -4,7 +4,7 @@ import type { Severity } from '../types'
 import { Drawer } from './Drawer'
 import { Mark } from './Mark'
 import { tipFitsAbove, Tips, useTip } from './overlay'
-import { listedRows } from './rows'
+import { listedRows, unreadCount } from './rows'
 import type { Theme } from './theme'
 
 interface AppProps {
@@ -26,7 +26,8 @@ const SEVERITIES: readonly Severity[] = ['critical', 'major', 'minor', 'trivial'
  *
  * The remembered value seeds it and is written back on every toggle, so a
  * reader who works with the drawer open arrives at the next pull request with
- * it open, and the fetch for the resolved threads starts with the page.
+ * it open. It no longer decides anything about the fetch: that starts with the
+ * page whether the drawer is open or not.
  *
  * The theme is held the same way and for a sharper reason: a theme change runs
  * no pass, so the engine's copy of the prefs is never republished for it, and a
@@ -87,7 +88,35 @@ export function App({ state }: AppProps) {
   // and marking that handle teaches the triangle to mean nothing. The drawer's
   // own notice still names both numbers either way, see `Drawer.tsx`.
   const missing = readable && state.check.more ? state.check.missing : 0
-  const warn = !readable || state.counts.unparsed > 0 || missing > 0
+
+  // The drawer's spinner, on the resting tab. It matters more here than it did
+  // there now that the fetch starts with the page rather than with the drawer:
+  // the window it covers is the one before the reader has opened anything, and
+  // the tab is the only thing on screen during it.
+  const reading = readable ? unreadCount(state) : 0
+
+  /**
+   * Whether the panel is still filling, from either of the two things that
+   * fill it: the deferred fetch, and the auto "Load more" clicking its way
+   * through a timeline GitHub renders in chunks.
+   *
+   * The second is the one that made the triangle flicker. A long pull request
+   * opens claiming 102 findings and holding 13, so the shortfall is real, large
+   * and about to close itself, and marking the handle for it is a warning that
+   * appears on every long page and then takes itself back. A caveat that
+   * resolves on its own was never a caveat.
+   */
+  const loading =
+    reading > 0 || (readable && state.prefs.autoLoadMore && state.check.more && state.check.missing > 0)
+
+  // Nothing about the list while the list is still arriving, on the triangle or
+  // in the title behind it: the two have to agree, or a hover during the load
+  // contradicts the tab it is hovering. An unreadable build is not a loading
+  // state and is said either way.
+  const shortfall = loading ? 0 : missing
+  const unreadable = loading ? 0 : state.counts.unparsed
+  const warn = !readable || unreadable > 0 || shortfall > 0
+
   // The label and the meter draw the same tally twice, so it is counted once.
   // A pass publishes a new state on every mutation of the page, which is a
   // render, which was two walks of the worklist building two identical maps.
@@ -111,7 +140,7 @@ export function App({ state }: AppProps) {
             class={warn ? 'handle warn' : 'handle'}
             type="button"
             onClick={() => show(true)}
-            title={handleTitle(readable, todo.length, state.counts.unparsed, missing)}
+            title={handleTitle(readable, todo.length, unreadable, shortfall, reading)}
             aria-expanded={false}
           >
             {/* The label the tab widens to show. It carries the sentence a first
@@ -135,7 +164,7 @@ export function App({ state }: AppProps) {
               </span>
             </span>
 
-            <span class="handle-stack">
+            <span class={reading > 0 ? 'handle-stack loading' : 'handle-stack'}>
               <Mark />
               <span class="handle-count">{readable ? todo.length : '—'}</span>
               {warn && (
@@ -148,6 +177,16 @@ export function App({ state }: AppProps) {
                   <span class={`meter-part ${severity}`} style={{ flexGrow: n }} key={severity} />
                 ))}
               </span>
+
+              {/* Last, so it paints over the three above it, and hidden from
+                  the accessibility tree because the button's own title already
+                  carries the sentence. A second `role="status"` inside a
+                  button would be a live region nobody asked for. */}
+              {reading > 0 && (
+                <span class="handle-loader" aria-hidden="true">
+                  <span class="spinner" />
+                </span>
+              )}
             </span>
           </button>
         )}
@@ -218,12 +257,20 @@ function headline(todo: number): string {
  * news. It comes first in the title because it is the one that says the rest of
  * the title is incomplete.
  */
-function handleTitle(readable: boolean, todo: number, unparsed: number, missing: number): string {
+function handleTitle(
+  readable: boolean,
+  todo: number,
+  unparsed: number,
+  missing: number,
+  reading: number,
+): string {
   if (!readable) return "RabbitHole: this GitHub build isn't supported yet. Nothing is hidden."
 
   const parts = [`${todo} to go`]
   if (missing > 0) parts.push(`${missing} not in the page`)
   if (unparsed > 0) parts.push(`${unparsed} unreadable`)
+  // Last, because it is the one that says the rest is still moving.
+  if (reading > 0) parts.push(`${reading} still to read`)
 
   return `RabbitHole: ${parts.join(', ')}`
 }

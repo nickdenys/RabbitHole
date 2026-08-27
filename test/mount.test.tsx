@@ -29,7 +29,6 @@ function state(kind: PageKind): TriageState {
     hidden: new Set(),
     counts: { total: 0, unresolved: 0, hidden: 0, unparsed: 0 },
     check: NO_CHECK,
-    readResolved: () => {},
     prefs: DEFAULT_PREFS,
     setPrefs: () => {},
   }

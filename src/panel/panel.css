@@ -161,12 +161,35 @@ button {
 }
 
 .handle-stack {
+  position: relative;
   display: flex;
   flex: 0 0 auto;
   flex-direction: column;
   align-items: center;
   gap: 7px;
   padding: 9px 8px;
+}
+
+/* The drawer's own spinner, over the resting tab rather than beside its three
+ * things. It matters more here than it does in the header: the fetch starts
+ * with the page now, so the window it covers is the one before the reader has
+ * opened anything, and the tab is all there is on screen during it.
+ *
+ * Over rather than in the stack, so the tab does not grow a fourth row and
+ * change height as it appears and goes. What is underneath is dimmed rather
+ * than replaced, because the count and the meter are still true while the
+ * fetch runs: they are the findings already read, and the spinner is the claim
+ * that there are more coming. */
+.handle-loader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.handle-stack.loading > :not(.handle-loader) {
+  opacity: 0.35;
 }
 
 .handle-count {

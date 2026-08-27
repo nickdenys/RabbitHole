@@ -15,8 +15,8 @@
  * for more gets six.
  *
  * The number is a courtesy to GitHub rather than a measured optimum: a pull
- * request with 97 collapsed threads is one panel open away from 97 requests,
- * and the browser would happily start them all.
+ * request with 97 collapsed threads is one page load away from 97 requests, and
+ * the browser would happily start them all.
  */
 export const MAX_CONCURRENCY = 6
 

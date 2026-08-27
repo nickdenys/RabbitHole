@@ -59,21 +59,6 @@ export interface TriageState {
    */
   check: CountCheck
   /**
-   * Ask for the resolved threads to be read back off GitHub, which is the
-   * deferred fetch and the only network this extension does.
-   *
-   * The panel calls it while the drawer is open and nothing calls it otherwise,
-   * which is the whole of "lazy, on panel open": a reader who never opens the
-   * drawer costs GitHub nothing, and the worklist is never behind a request.
-   *
-   * Idempotent, cheap, and safe to call on every render. It starts a request
-   * only for a collapsed thread that has no answer and none in flight, so the
-   * second call after the last fragment lands does nothing at all. Results
-   * arrive as further published states rather than through a promise, because a
-   * pass is the only thing that may decide what the page looks like.
-   */
-  readResolved: () => void
-  /**
    * The reader's four choices, as of this pass. `hideMode` is the one the
    * engine acts on; the rest are here because the panel is only ever given a
    * state, and a second channel into it would be a second thing to keep in step
@@ -175,9 +160,15 @@ export function startEngine(
     if (page !== undefined && current !== page) forget()
     page = current
 
-    const state = runPass(doc, url, fetched, prefs, readResolved, setPrefs)
+    const state = runPass(doc, url, fetched, prefs, setPrefs)
     published = state.threads
     onState(state)
+
+    // The fetch starts with the page, not with the drawer. `published` is set
+    // above because this reads it, and `onState` comes first because the
+    // worklist should be on screen before the network is touched: the fetch
+    // only ever adds to a drawer that is already drawable.
+    readResolved()
   }
 
   /**
@@ -228,12 +219,19 @@ export function startEngine(
   /**
    * Start reading whatever collapsed threads still have no answer.
    *
-   * Called by the panel while its drawer is open, on every render, which is why
-   * it does nothing at all in the common case: a thread already answered for or
-   * already in flight is skipped, so the second call is a walk over a list and
-   * no request. It also means a thread resolved after the drawer was opened is
-   * picked up by the next render rather than needing the drawer closed and
-   * reopened.
+   * Called at the end of every pass, which is why it does nothing at all in the
+   * common case: a thread already answered for or already in flight is skipped,
+   * so every pass after the first is a walk over a list and no request. The
+   * first pass of a page is the one that asks, and a thread that collapses
+   * later, because it was resolved here or because GitHub rendered it late, is
+   * asked about by the pass that notices it.
+   *
+   * It used to be the panel that called this, on every render of the open
+   * drawer. That made the drawer's first frame the frame the requests started
+   * in, so a reader who opened it watched the resolved rows fill in. Starting
+   * with the page means the fragments are usually already in hand by then, at
+   * the cost of asking GitHub on every pull request the reader opens rather
+   * than only the ones they triage.
    */
   function readResolved(): void {
     const wanted = new Map<string, string>()
@@ -348,7 +346,6 @@ function runPass(
   url: string,
   fetched: ReadonlyMap<string, FetchedThread | null>,
   prefs: Prefs,
-  readResolved: () => void,
   setPrefs: (prefs: Partial<Prefs>) => void,
 ): TriageState {
   const kind = detectPage(doc, url)
@@ -367,7 +364,6 @@ function runPass(
       hidden: new Set(),
       counts: NO_COUNTS,
       check: NO_CHECK,
-      readResolved,
       prefs,
       setPrefs,
     }
@@ -429,7 +425,6 @@ function runPass(
       hidden: hideable.length,
       unparsed: count(rows, (row) => isUnparsed(row.verdict)),
     },
-    readResolved,
     prefs,
     setPrefs,
   }
