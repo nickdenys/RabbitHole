@@ -76,11 +76,13 @@ export function unreadCount(state: TriageState): number {
  * session. The one predicate behind both the list and the count, so a thread
  * can never be both drawn and reported as one the drawer is not showing.
  *
- * It is now a transient state rather than a permanent one: opening the drawer
- * starts the fetch, every answer moves the row into the list, and a thread the
- * fetch could not read gets 'fetch-failed' and is listed as unreadable rather
- * than staying in this count. So the number counts requests in flight, which is
- * what the drawer's notice says about it.
+ * It is a transient state rather than a permanent one: the fetch starts with
+ * the page, every answer moves the row into the list, and a thread the fetch
+ * could not read gets 'fetch-failed' and is listed as unreadable rather than
+ * staying in this count. So the number counts requests in flight, which is what
+ * the drawer's notice says about it. Since the asking moved off the drawer, a
+ * reader who opens it a moment after the page settles usually sees no notice at
+ * all, because there is nothing left in flight to report.
  */
 function isUnread(row: TriageRow): boolean {
   if (row.verdict.hide || row.verdict.reason !== 'collapsed') return false

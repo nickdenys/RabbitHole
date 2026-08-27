@@ -37,6 +37,15 @@ beforeAll(() => setUrl(PR_URL))
  */
 beforeEach(() => vi.useFakeTimers())
 
+/**
+ * Every pass asks GitHub for the collapsed threads it can see, so a case that
+ * is not about the deferred fetch would reach the network on its first pass.
+ * The default is a request that never answers: the page reads as it did before
+ * any fragment landed, and a case that wants answers stubs over this **before**
+ * it starts an engine, because the first pass is where the asking happens.
+ */
+beforeEach(() => vi.stubGlobal('fetch', () => new Promise(() => {})))
+
 const teardowns: Array<() => void> = []
 
 afterEach(() => {
@@ -169,6 +178,11 @@ describe.each(NAMES)('%s', (name) => {
   let stop: () => void
 
   beforeAll(() => {
+    // A suite's `beforeAll` runs before the file's `beforeEach`, so the default
+    // stub is not in place yet and this pass would ask github.com for the
+    // fixture's collapsed threads for real.
+    vi.stubGlobal('fetch', () => new Promise(() => {}))
+
     stop = startEngine(docs[name], (published) => {
       state = published
     })
@@ -569,26 +583,63 @@ function stubFetch(bodies: Record<string, string | null>): string[] {
   return asked
 }
 
+/**
+ * Stand in for the network with an answer that waits to be released, which is
+ * how a case gets a look at a row between the ask and the answer now that the
+ * ask happens on the first pass rather than on a click.
+ */
+function heldFetch(body: string): () => void {
+  let release: () => void = () => {}
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+
+  vi.stubGlobal('fetch', async () => {
+    await held
+    return { ok: true, status: 200, text: async () => body }
+  })
+
+  return () => release()
+}
+
 describe('reading the resolved threads', () => {
-  it('asks for nothing until the panel asks', async () => {
+  it('asks with the page, not with the drawer', async () => {
     const asked = stubFetch({ [deferredUrl(1)]: FRAGMENT })
     const states = engineOn(doc(collapsedMarkup(1)))
 
     await settle()
 
-    // The worklist is on screen and the network has not been touched. That is
-    // the whole of "lazy, on panel open": the first pass is never behind a
-    // request, and a reader who never opens the drawer never makes one.
-    expect(asked).toEqual([])
-    expect(latest(states).counts.total).toBe(1)
-    expect(latest(states).rows[0].verdict).toEqual({ hide: false, reason: 'collapsed' })
+    // Nothing here opened a drawer, and the thread is described anyway. The
+    // panel has no way to ask any more, so this is the only thing that could
+    // have: a reader who opens the drawer finds the answers already in it.
+    expect(asked).toEqual([deferredUrl(1)])
+    expect(latest(states).rows[0].finding?.title).toBe(FRAGMENT_TITLE)
+  })
+
+  it('publishes the worklist before it touches the network', async () => {
+    const states: TriageState[] = []
+    let askedAfter = -1
+
+    vi.stubGlobal('fetch', async () => {
+      askedAfter = states.length
+      return { ok: true, status: 200, text: async () => FRAGMENT }
+    })
+
+    teardowns.push(startEngine(doc(collapsedMarkup(1)), (state) => states.push(state)))
+    await settle()
+
+    // The first pass is never behind a request. The count and the meter are on
+    // screen from the state published before the first fetch was started, and
+    // the fragment only ever adds to a drawer that was already drawable.
+    expect(askedAfter).toBe(1)
+    expect(states[0].counts.total).toBe(1)
+    expect(states[0].rows[0].verdict).toEqual({ hide: false, reason: 'collapsed' })
   })
 
   it('reads a collapsed thread back and describes it like any other', async () => {
     const asked = stubFetch({ [deferredUrl(1)]: FRAGMENT })
     const states = engineOn(doc(collapsedMarkup(1)))
 
-    latest(states).readResolved()
     await settle()
 
     expect(asked).toEqual([deferredUrl(1)])
@@ -609,7 +660,6 @@ describe('reading the resolved threads', () => {
     stubFetch({ [deferredUrl(1)]: FRAGMENT })
     const states = engineOn(doc(collapsedMarkup(1)))
 
-    latest(states).readResolved()
     await settle()
 
     // None of these is in the fragment, and none of them moves. The stub in the
@@ -625,10 +675,9 @@ describe('reading the resolved threads', () => {
     ['a request that failed', null],
     ['a body with no comment in it', '<div class="js-inline-comments-container"></div>'],
   ])('lists a thread it could not read: %s', async (_name, body) => {
-    const states = engineOn(doc(collapsedMarkup(1)))
     stubFetch({ [deferredUrl(1)]: body })
+    const states = engineOn(doc(collapsedMarkup(1)))
 
-    latest(states).readResolved()
     await settle()
 
     // Visible, on the page and in the panel, and counted in the warning. The
@@ -640,30 +689,29 @@ describe('reading the resolved threads', () => {
     expect(latest(states).counts.unparsed).toBe(1)
   })
 
-  it('asks once per thread, however often it is asked', async () => {
+  it('asks once per thread, however many passes run', async () => {
     const asked = stubFetch({ [deferredUrl(1)]: FRAGMENT, [deferredUrl(2)]: null })
-    const states = engineOn(doc(collapsedMarkup(1) + collapsedMarkup(2)))
+    const d = doc(collapsedMarkup(1) + collapsedMarkup(2))
+    engineOn(d)
 
-    // Twice before anything lands, so the second call has to skip requests that
-    // are in flight rather than only ones that have answered.
-    latest(states).readResolved()
-    latest(states).readResolved()
+    // Several asks already: the first pass makes one, and every fragment that
+    // lands schedules a pass that makes another while the rest are still in
+    // flight. Those have to skip requests in flight, not only answered ones.
     await settle()
 
-    latest(states).readResolved()
+    // One more pass, over threads that are all answered for by now, including
+    // the one that failed: a dead thread is asked about once per page.
+    d.body.appendChild(d.createElement('div'))
     await settle()
 
-    // Including the one that failed: a dead thread is asked about once per
-    // page, not once per render of the open drawer.
     expect(asked).toEqual([deferredUrl(1), deferredUrl(2)])
   })
 
   it('prefers the page to the fragment when GitHub renders the thread after all', async () => {
+    stubFetch({ [deferredUrl(1)]: FRAGMENT })
     const d = doc(collapsedMarkup(1))
     const states = engineOn(d)
-    stubFetch({ [deferredUrl(1)]: FRAGMENT })
 
-    latest(states).readResolved()
     await settle()
     expect(latest(states).rows[0].finding?.title).toBe(FRAGMENT_TITLE)
 
@@ -676,20 +724,22 @@ describe('reading the resolved threads', () => {
   })
 
   it('replaces the session finding of a thread resolved here', async () => {
+    const release = heldFetch(FRAGMENT)
     const d = doc(resolvableMarkup(1))
     const states = engineOn(d)
-    stubFetch({ [deferredUrl(1)]: FRAGMENT })
 
     expect(resolveThread(latest(states).rows[0])).toBe(true)
     expect(sessionFinding('1')?.title).toBe('Findings.')
 
     // GitHub accepts the resolve and swaps in the collapsed partial, which is
-    // the moment A11's cache became the only description of this thread.
+    // the moment A11's cache became the only description of this thread. The
+    // fetch for it is in flight and held, so this is the row as it reads in
+    // between: null, because the engine never falls back to the cache.
     d.body.innerHTML = collapsedMarkup(1)
     await settle()
     expect(latest(states).rows[0].finding).toBeNull()
 
-    latest(states).readResolved()
+    release()
     await settle()
 
     // And the moment it stopped being: the row now draws from what GitHub
@@ -698,22 +748,27 @@ describe('reading the resolved threads', () => {
   })
 
   it('drops a fetch that was still in flight when the page changed', async () => {
-    const d = doc(collapsedMarkup(1))
-    const states = engineOn(d)
-
     let release: (() => void) | undefined
     const held = new Promise<void>((resolve) => {
       release = resolve
     })
 
-    let signal: AbortSignal | undefined
+    // Only the first request answers. The pull request being arrived at has the
+    // same collapsed thread in it, so the pass after the navigation asks for it
+    // again on a fresh controller: leave that one hanging and the row can only
+    // be described by the answer that arrived too late, which is the thing
+    // under test.
+    const signals: (AbortSignal | undefined)[] = []
     vi.stubGlobal('fetch', async (_url: string, init: { signal?: AbortSignal }) => {
-      signal = init.signal
+      signals.push(init.signal)
+      if (signals.length > 1) return new Promise(() => {})
+
       await held
       return { ok: true, status: 200, text: async () => FRAGMENT }
     })
 
-    latest(states).readResolved()
+    const d = doc(collapsedMarkup(1))
+    const states = engineOn(d)
     await vi.advanceTimersByTimeAsync(0)
 
     // The same document, deliberately: a reset that only worked because Turbo
@@ -722,7 +777,7 @@ describe('reading the resolved threads', () => {
     release?.()
     await settle()
 
-    expect(signal?.aborted).toBe(true)
+    expect(signals[0]?.aborted).toBe(true)
 
     // Answered after the navigation and therefore never merged. A fragment from
     // the pull request being left, keyed by an id that exists on the one being

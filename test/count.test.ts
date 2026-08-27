@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { countCheck, NO_CHECK } from '../src/count'
 import { startEngine, type TriageRow, type TriageState } from '../src/engine'
 import type { HideVerdict } from '../src/hide/policy'
@@ -11,6 +11,15 @@ const PR_URL = 'https://github.com/owner/repo/pull/1'
 beforeAll(() => {
   ;(window as unknown as { happyDOM: { setURL(url: string): void } }).happyDOM.setURL(PR_URL)
 })
+
+/**
+ * Every pass now asks GitHub for the collapsed threads it can see, and the
+ * fixtures are full of them, so a test that starts an engine touches the
+ * network whether it means to or not. The default is a request that never
+ * answers: the page reads exactly as it did before any fragment landed, which
+ * is the state these cases were written against.
+ */
+beforeAll(() => vi.stubGlobal('fetch', () => new Promise(() => {})))
 
 /** Only `actionableCount` is read, so the rest is the shape and not the point. */
 function note(actionableCount: number | null): CodeRabbitNote {

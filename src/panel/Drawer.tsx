@@ -107,21 +107,6 @@ export function Drawer({ state, listed, theme, onTheme, onClose }: DrawerProps) 
     if (card !== null && active !== null && card.contains(active)) warnButton.current?.focus()
   }
 
-  // "Lazy, on panel open" in one line: this component exists only while the
-  // drawer is open, so mounting it is the open and unmounting it is the close,
-  // and a reader who never opens the drawer never asks GitHub for anything.
-  //
-  // Every render rather than only the first, because the request set grows: a
-  // thread resolved here collapses, and the pass that notices hands down a new
-  // state whose render picks it up. The engine skips anything already answered
-  // or in flight, so the repeat costs a walk over the thread list.
-  //
-  // Layout rather than plain, for the same reason as `Row`'s: preact defers
-  // `useEffect` behind a frame, and there is no reason for the first request to
-  // wait on paint. It publishes nothing synchronously, so no render is nested
-  // inside this one.
-  useLayoutEffect(() => state.readResolved())
-
   const empty = emptyState(state, listed)
   const unsupported = empty === 'unsupported'
   const openRows = listed.filter((row) => !row.thread.resolved)
