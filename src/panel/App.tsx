@@ -88,6 +88,10 @@ export function App({ state }: AppProps) {
   // own notice still names both numbers either way, see `Drawer.tsx`.
   const missing = readable && state.check.more ? state.check.missing : 0
   const warn = !readable || state.counts.unparsed > 0 || missing > 0
+  // The label and the meter draw the same tally twice, so it is counted once.
+  // A pass publishes a new state on every mutation of the page, which is a
+  // render, which was two walks of the worklist building two identical maps.
+  const parts = readable ? breakdown(todo) : []
 
   return (
     <div class={open ? `panel theme-${theme} open` : `panel theme-${theme}`}>
@@ -119,7 +123,7 @@ export function App({ state }: AppProps) {
               </span>
               <span class="handle-breakdown">
                 {readable ? (
-                  breakdown(todo).map(([severity, n]) => (
+                  parts.map(([severity, n]) => (
                     <span class="handle-part" key={severity}>
                       <span class={`dot ${severity}`} aria-hidden="true" />
                       {n} {severity}
@@ -140,10 +144,9 @@ export function App({ state }: AppProps) {
                 </span>
               )}
               <span class="meter" aria-hidden="true">
-                {readable &&
-                  breakdown(todo).map(([severity, n]) => (
-                    <span class={`meter-part ${severity}`} style={{ flexGrow: n }} key={severity} />
-                  ))}
+                {parts.map(([severity, n]) => (
+                  <span class={`meter-part ${severity}`} style={{ flexGrow: n }} key={severity} />
+                ))}
               </span>
             </span>
           </button>

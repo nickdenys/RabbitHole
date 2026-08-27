@@ -192,6 +192,10 @@ function hideSet(targets: Element[]): Set<Element> {
   const byItem = new Map<Element, Element[]>()
   const hidden = new Set<Element>()
 
+  // The same targets as a set, for the coverage test below. Membership is by
+  // reference, which is the only identity an element has here.
+  const named = new Set(targets)
+
   for (const el of targets) {
     const item = el.closest(TIMELINE_ITEM)
 
@@ -202,18 +206,23 @@ function hideSet(targets: Element[]): Set<Element> {
       continue
     }
 
-    byItem.set(item, [...(byItem.get(item) ?? []), el])
+    // Appended to the array already under this item rather than rebuilt from
+    // it. A review can post 25 threads into one item, and copying the list to
+    // add each of them is 25 copies to end up with one list of 25.
+    const members = byItem.get(item)
+    if (members === undefined) byItem.set(item, [el])
+    else members.push(el)
   }
 
   for (const [item, members] of byItem) {
-    if (coversEverything(item, targets)) hidden.add(item)
+    if (coversEverything(item, named)) hidden.add(item)
     else for (const el of members) hidden.add(el)
   }
 
   return hidden
 }
 
-function coversEverything(item: Element, targets: Element[]): boolean {
+function coversEverything(item: Element, named: ReadonlySet<Element>): boolean {
   if (item.querySelector(MORE_CONTROL) !== null) return false
 
   const threads = [...item.querySelectorAll(THREAD)]
@@ -225,7 +234,26 @@ function coversEverything(item: Element, targets: Element[]): boolean {
     (group) => group.closest(THREAD) === null,
   )
 
-  return [...threads, ...groups].every((el) => targets.some((t) => t === el || t.contains(el)))
+  return [...threads, ...groups].every((el) => isNamed(el, named))
+}
+
+/**
+ * Whether this element is a target, or sits inside one.
+ *
+ * The same question as `targets.some((t) => t === el || t.contains(el))`, asked
+ * the other way round. `t.contains(el)` is true exactly when `t` is `el` or an
+ * ancestor of it, so walking `el`'s ancestors and asking the set is the same
+ * test bounded by the depth of the tree rather than by the number of targets.
+ * The old form was a `contains` walk per target per element, which on a review
+ * posting 25 threads into a page holding 148 targets is a few thousand tree
+ * walks to answer one item.
+ */
+function isNamed(el: Element, named: ReadonlySet<Element>): boolean {
+  for (let node: Element | null = el; node !== null; node = node.parentElement) {
+    if (named.has(node)) return true
+  }
+
+  return false
 }
 
 /**

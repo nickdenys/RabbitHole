@@ -38,13 +38,16 @@ export function scanThreads(doc: Document): Thread[] {
 function readThread(el: Element): Thread {
   const problems: ParseProblem[] = []
 
-  const id = readId(el)
+  // Read once, up here, because `readId` wants it too and an attribute read
+  // that is passed down cannot disagree with the one the record is built from.
+  const deferredUrl = el.getAttribute('data-deferred-content-url')
+
+  const id = readId(el, deferredUrl)
   if (id === null) problems.push('no-id')
 
   const file = readFile(el)
   if (file === null) problems.push('no-file')
 
-  const deferredUrl = el.getAttribute('data-deferred-content-url')
   // Derived from what is present, not from `resolved`: they are two separate
   // facts, and GitHub can render an expanded thread that is also resolved.
   const collapsed = deferredUrl !== null && el.querySelector(COMMENT_BODY) === null
@@ -61,7 +64,15 @@ function readThread(el: Element): Thread {
   // none means the markup moved rather than that the thread is empty. Guarded
   // on `collapsed` so it never fires on the 97 threads that are simply waiting
   // to be fetched. Not observed in any fixture.
-  if (!collapsed && el.querySelector(REVIEW_COMMENT) === null) problems.push('no-body')
+  //
+  // Guarded on `authors` as well, which is not a second rule but the same one
+  // already answered. `readAuthors` returns null the moment it finds no
+  // comment, so a non-null `authors` is proof that this query would match, and
+  // running it anyway is a subtree walk per thread per pass for a branch that
+  // cannot be taken.
+  if (!collapsed && authors === null && el.querySelector(REVIEW_COMMENT) === null) {
+    problems.push('no-body')
+  }
 
   return {
     el,
@@ -95,11 +106,11 @@ function readThread(el: Element): Thread {
  * changes state, and `deferredUrl` is on the row for anything that needs the
  * real thread id.
  */
-function readId(el: Element): string | null {
+function readId(el: Element, deferredUrl: string | null): string | null {
   const frame = el.closest(THREAD_FRAME)?.id.match(FRAME_ID)?.[1]
   if (frame) return frame
 
-  const deferred = el.getAttribute('data-deferred-content-url')?.match(THREAD_ID_IN_URL)?.[1]
+  const deferred = deferredUrl?.match(THREAD_ID_IN_URL)?.[1]
   if (deferred) return deferred
 
   const action = el.querySelector(RESOLVE_FORM)?.getAttribute('action')?.match(THREAD_ID_IN_URL)?.[1]
@@ -118,5 +129,12 @@ function readFile(el: Element): string | null {
  * finds precisely the same set as a substring search.
  */
 function isOutdated(el: Element): boolean {
-  return [...el.querySelectorAll('.Label')].some((label) => label.textContent?.trim() === 'Outdated')
+  // Walked rather than spread into an array first. A `NodeList` is iterable, so
+  // the copy bought nothing but `.some`, and this runs once per thread on every
+  // pass over a page that can hold 148 of them.
+  for (const label of el.querySelectorAll('.Label')) {
+    if (label.textContent?.trim() === 'Outdated') return true
+  }
+
+  return false
 }
