@@ -10,7 +10,7 @@ Everyone's coping strategy is the same: hide the bot. At least four tools do tha
 
 RabbitHole takes those comments out of the timeline and puts them in a side drawer instead. **The checklist is the point. The hiding is just how the findings get somewhere you can work them.**
 
-**Status: v0.3 works.** It builds, loads unpacked, and takes a real review to zero.
+**Status: v0.3 works on Chrome.** It builds, loads unpacked, and takes a real review to zero. The Firefox build is new: it builds and passes `web-ext lint` clean, but it has not yet been taken through a live review the way the Chrome one has.
 
 ## What you get
 
@@ -40,7 +40,7 @@ Rule 4 makes the edge tab safe to leave off. Every route to a hide proves the co
 
 ## How it works
 
-A Manifest V3 extension, panel in Preact, everything read off the rendered page. No API token, no backend, no OAuth, and two permissions: `storage`, plus `contextMenus` for the toolbar toggle.
+A Manifest V3 extension for Chrome and Firefox, panel in Preact, everything read off the rendered page. No API token, no backend, no OAuth, and two permissions: `storage`, plus `contextMenus` for the toolbar toggle.
 
 * **Your worklist costs zero network requests.** Unresolved threads are already in the page.
 * **Resolved threads are fetched as the page settles**, six at a time, through GitHub's own deferred endpoint on your session cookie, since GitHub renders them collapsed and authorless. Private repos need no token. Responses go through `DOMParser` and are never injected, so there is nothing to sanitize. A thread whose fetch fails is listed as unreadable and stays in the timeline.
@@ -66,17 +66,23 @@ By default the panel closes the gap itself, clicking GitHub's own "Load more" un
 
 ### Off switch
 
-**Right click the toolbar icon for a checkbox that turns the extension off entirely.** Unchecking it stops the engine in every open tab immediately, reveals every hidden thread and takes the panel off the page, and the icon carries an `OFF` badge. It lives on its own storage key, written by the background service worker, and defaults to on, so a failed read never leaves a silently disabled extension.
+**Right click the toolbar icon for a checkbox that turns the extension off entirely.** Unchecking it stops the engine in every open tab immediately, reveals every hidden thread and takes the panel off the page, and the icon carries an `OFF` badge. It lives on its own storage key, written by the background script, and defaults to on, so a failed read never leaves a silently disabled extension.
 
 ## Development
 
 ```
 npm install
-npm run dev      # vite build --watch
-npm test         # vitest, happy-dom
+npm run build          # both browsers, into dist/chrome and dist/firefox
+npm run dev            # vite build --watch, Chrome (dev:firefox for the other)
+npm run start:firefox  # web-ext, a scratch profile with the add-on installed
+npm test               # vitest, happy-dom
 ```
 
-Load the `dist/` folder as an unpacked extension at `chrome://extensions` with Developer mode enabled. Rebuilds need a manual extension reload. Chromium browsers only.
+**Chrome:** load `dist/chrome` as an unpacked extension at `chrome://extensions` with Developer mode enabled. Rebuilds need a manual extension reload.
+
+**Firefox:** `npm run start:firefox` opens a scratch profile and reloads on rebuild. To use your own profile instead, load `dist/firefox/manifest.json` at `about:debugging`, which lasts until the browser closes.
+
+Both directories are written from one `src/manifest.ts`, and the JavaScript in them is byte for byte the same. Firefox needs a different manifest for exactly one reason (it runs the background script as an event page, since it does not implement `background.service_worker`), plus the add-on id and minimum version AMO requires. `npm run package` produces a zip per store.
 
 **Fixtures follow a strict rule:** committed fixtures come from public PRs only, and captures from private repositories stay local and gitignored. See `test/fixtures/README.md`.
 

@@ -43,7 +43,7 @@ function stubChrome(stored: Record<string, unknown> = {}) {
     },
     contextMenus: {
       create: vi.fn((props: CreateArgs) => { created.push(props) }),
-      removeAll: vi.fn((callback: () => void) => callback()),
+      removeAll: vi.fn(async () => {}),
       onClicked: {
         addListener: vi.fn((cb: (info: { menuItemId: string; checked?: boolean }) => void) => {
           clicked = cb

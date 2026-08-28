@@ -5,8 +5,18 @@
   "type": "module",
   "description": "Browser extension that turns CodeRabbit review comments into a triage worklist on GitHub pull requests.",
   "scripts": {
-    "build": "rm -rf dist && vite build && vite build --config vite.background.config.ts",
-    "dev": "vite build --watch & vite build --watch --config vite.background.config.ts & wait",
+    "build": "rm -rf dist && npm run build:chrome && npm run build:firefox",
+    "build:chrome": "TARGET=chrome npm run build:target",
+    "build:firefox": "TARGET=firefox npm run build:target",
+    "build:target": "vite build && vite build --config vite.background.config.ts",
+    "dev": "npm run dev:chrome",
+    "dev:chrome": "TARGET=chrome npm run dev:target",
+    "dev:firefox": "TARGET=firefox npm run dev:target",
+    "dev:target": "vite build --watch & vite build --watch --config vite.background.config.ts & wait",
+    "start:firefox": "web-ext run --source-dir dist/firefox --target firefox-desktop",
+    "package": "npm run build && npm run package:chrome && npm run package:firefox",
+    "package:chrome": "cd dist/chrome && zip -qr ../rabbithole-chrome.zip .",
+    "package:firefox": "web-ext build --source-dir dist/firefox --artifacts-dir dist --filename rabbithole-firefox.zip --overwrite-dest",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
@@ -18,6 +28,7 @@
     "happy-dom": "^20.11.2",
     "typescript": "^7.0.2",
     "vite": "^8.2.1",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "web-ext": "^8.3.0"
   }
 }
