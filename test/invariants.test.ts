@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import type { TriageRow } from '../src/engine'
 import { applyHiding, revealAll } from '../src/hide/apply'
 import { hideVerdict, type HideMode } from '../src/hide/policy'
+import { hasCodeRabbit } from '../src/panel/rows'
 import { scanNotes } from '../src/parse/notes'
 import { scanThreads } from '../src/parse/thread'
 import { fixtureNames, loadFixture } from './support/fixture'
@@ -13,6 +15,9 @@ import { fixtureNames, loadFixture } from './support/fixture'
  *
  *  1. Never hide a thread that could not be parsed.
  *  2. Never hide a thread you cannot positively attribute to CodeRabbit.
+ *
+ * Invariant 4 is asserted at the bottom of this file rather than in this block,
+ * because it is a claim about the whole page rather than about one thread.
  *
  * It never names a fixture, so every capture added later becomes an invariant
  * test for free, and a rule reordered in a way that breaks a mode fails here
@@ -154,6 +159,70 @@ it('hides nothing at all on a PR CodeRabbit never touched', () => {
   for (const mode of MODES) {
     expect(scans['no-coderabbit'].filter((thread) => hideVerdict(thread, mode).hide)).toEqual([])
   }
+})
+
+/**
+ * **Invariant 4: the panel is only ever absent from a page it has not touched.**
+ *
+ * Stated the way it can fail rather than the way it is written: if the panel
+ * has decided there is no CodeRabbit here, then nothing on this page was
+ * hidden. The dangerous version of the feature is a handle that disappears from
+ * a page whose findings the extension has already taken out of the timeline,
+ * which is invariant 3's failure with the evidence removed as well.
+ *
+ * Composed from the scan the way every case above is, rather than run through
+ * `startEngine`: the predicate reads two arrays, and the pass that would build
+ * them is the most expensive thing in this suite on an 8.3 MB capture that five
+ * files already parse. `finding` is null throughout because nothing here reads
+ * it, and `hasCodeRabbit` does not.
+ *
+ * Both modes, because aggressive mode hides strictly more and is therefore the
+ * mode in which an absent panel could hide the most.
+ */
+describe.each(MODES)('%s mode', (mode) => {
+  describe.each(NAMES)('%s', (name) => {
+    it('hides nothing on a page it says has no CodeRabbit on it', () => {
+      const doc = docs[name]
+      const rows: TriageRow[] = scans[name].map((thread) => ({
+        thread,
+        finding: null,
+        verdict: hideVerdict(thread, mode),
+      }))
+
+      if (hasCodeRabbit({ notes: notes[name], rows })) return
+
+      try {
+        applyHiding(
+          [
+            ...rows.filter((row) => row.verdict.hide).map((row) => row.thread.el),
+            ...notes[name].map((note) => note.el),
+          ],
+          doc,
+        )
+
+        expect(doc.querySelectorAll('.rh-hidden'), 'elements taken off the page').toHaveLength(0)
+      } finally {
+        revealAll(doc)
+      }
+    })
+  })
+})
+
+// Without the second half this passes on every fixture by never firing, which
+// is exactly the bug it would not catch.
+it('has a fixture with no CodeRabbit on it, and four with', () => {
+  const answers = NAMES.map((name) => {
+    const rows: TriageRow[] = scans[name].map((thread) => ({
+      thread,
+      finding: null,
+      verdict: hideVerdict(thread, 'safe'),
+    }))
+
+    return hasCodeRabbit({ notes: notes[name], rows })
+  })
+
+  expect(answers.filter((yes) => !yes)).toHaveLength(1)
+  expect(answers.filter((yes) => yes)).toHaveLength(NAMES.length - 1)
 })
 
 it('hides something somewhere, so the invariants are not vacuous', () => {

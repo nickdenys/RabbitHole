@@ -2,12 +2,65 @@ import type { TriageRow, TriageState } from '../engine'
 import { sessionFinding } from './actions'
 
 /**
+ * Whether the extension can point at anything on this page that is CodeRabbit's.
+ *
+ * **Invariant 4: the panel is only ever absent from a page it has not touched.**
+ * A pull request CodeRabbit never reviewed gets no handle at all, which is what
+ * a reader means by the extension being quiet where it has nothing to say. That
+ * is only honest while the absence cannot hide a finding, and this predicate is
+ * what makes it so: every route to a `hide: true` verdict proves the root
+ * comment is CodeRabbit's, and every note hidden is a note found here, so a
+ * page with no evidence is a page with an untouched timeline.
+ *
+ * **Positive evidence, never the absence of a thread.** The naive test, "no
+ * CodeRabbit rows", flickers: GitHub collapses every resolved thread whoever
+ * wrote it, so a resolved human thread is unattributable until the deferred
+ * fetch answers for it. `no-coderabbit.html` is exactly that page, three
+ * threads of which one is collapsed, and an absence test would draw the handle,
+ * wait for the fetch and then take it away again. Asking for proof instead
+ * makes the panel monotonic within a page: it can appear when CodeRabbit posts
+ * a review while you are reading, and it never vanishes underneath you.
+ *
+ * So `collapsed` is not evidence, because nobody has read that thread yet, and
+ * `not-coderabbit` is evidence of the opposite. Everything else is proof: a
+ * note carries CodeRabbit's own account link, and the four remaining kept
+ * reasons are all reached past the `rootIsCodeRabbit` test or are a thread the
+ * extension could not read, which is the case invariant 3 exists for and which
+ * must keep its warning.
+ *
+ * Readability is not asked about here, and the caller must ask first. An
+ * unreadable build publishes no notes and no rows, so this would answer false
+ * for the one page whose whole point is to say it could not be read. See
+ * `mount.tsx`.
+ *
+ * Takes the two fields it reads rather than the whole state, so the invariant
+ * suite can compose one out of a scan the way it composes its verdicts, without
+ * standing up an engine to ask a question about two arrays.
+ */
+export function hasCodeRabbit(state: Pick<TriageState, 'notes' | 'rows'>): boolean {
+  if (state.notes.length > 0) return true
+
+  return state.rows.some((row) => isEvidence(row))
+}
+
+function isEvidence(row: TriageRow): boolean {
+  if (row.verdict.hide) return true
+  return row.verdict.reason !== 'not-coderabbit' && row.verdict.reason !== 'collapsed'
+}
+
+/**
  * What the drawer shows instead of a list, and why. Invariant 3 as a user sees
  * it: "nothing to do" and "this page could not be read" must never look alike.
  *
  *   'unsupported'  the detector does not know this build, so nothing was hidden
- *   'no-findings'  the page was read and holds no CodeRabbit thread at all
+ *   'no-findings'  CodeRabbit reviewed this pull request and posted no finding
  *   'all-done'     there are findings and none of them is still open
+ *
+ * 'no-findings' narrowed when invariant 4 arrived. It used to cover a page with
+ * no CodeRabbit thread on it at all, which is now a page with no panel: the
+ * drawer cannot be opened there, so the only way to reach this state is a
+ * review that posted its walkthrough and its summary and listed nothing under
+ * them. See `hasCodeRabbit`.
  */
 export type EmptyState = 'unsupported' | 'no-findings' | 'all-done'
 
