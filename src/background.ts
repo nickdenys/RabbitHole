@@ -2,9 +2,12 @@
  * The toolbar icon's right-click menu, and nothing else this extension needs a
  * background context for.
  *
- * A service worker, so nothing here may hold state across an idle timeout: MV3
- * tears this down between clicks and respawns it on the next event. Every read
- * and write goes straight to `chrome.storage.local`, never through
+ * A service worker in Chrome and an event page in Firefox, which for this file
+ * is the same rule: nothing here may hold state across an idle timeout, because
+ * both browsers tear it down between clicks and respawn it on the next event.
+ * That is why the two targets can share these bytes despite disagreeing about
+ * what runs them, and it was already true before Firefox was a target. Every
+ * read and write goes straight to `chrome.storage.local`, never through
  * `src/enabled.ts`'s helpers or `src/prefs.ts`'s stateful `current` cache,
  * both of which assume a long-lived content script. A cache started fresh in
  * a respawned worker and then merged onto would write stale defaults over
@@ -32,22 +35,26 @@ chrome().contextMenus.onClicked.addListener((info) => {
  * (Re)create the one checkbox item and set the badge from whatever is
  * currently stored, on install, on update, and on every browser startup.
  *
- * `removeAll` first rather than trusting a menu Chrome may already be showing:
- * a stale item from a previous version of this file, with a different title
- * or `checked` value baked in at creation time, would otherwise sit there
- * until the next click.
+ * `removeAll` first rather than trusting a menu the browser may already be
+ * showing: a stale item from a previous version of this file, with a different
+ * title or `checked` value baked in at creation time, would otherwise sit
+ * there until the next click.
+ *
+ * Awaited rather than given a callback. Both forms work in Chrome, but Firefox
+ * documents the `chrome.*` namespace under MV3 as promise returning, and a
+ * promise is the shape both targets agree on.
  */
 async function sync(): Promise<void> {
   const enabled = await read()
 
-  chrome().contextMenus.removeAll(() => {
-    chrome().contextMenus.create({
-      id: MENU_ID,
-      type: 'checkbox',
-      title: 'Enabled',
-      checked: enabled,
-      contexts: ['action'],
-    })
+  await chrome().contextMenus.removeAll()
+
+  chrome().contextMenus.create({
+    id: MENU_ID,
+    type: 'checkbox',
+    title: 'Enabled',
+    checked: enabled,
+    contexts: ['action'],
   })
 
   setBadge(enabled)
@@ -88,7 +95,7 @@ interface ChromeApi {
       checked: boolean
       contexts: string[]
     }): void
-    removeAll(callback: () => void): void
+    removeAll(): Promise<void>
     onClicked: EventListener1<{ menuItemId: string | number; checked?: boolean }>
   }
   action: {

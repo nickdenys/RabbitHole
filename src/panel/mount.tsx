@@ -15,13 +15,36 @@ let shadowRoot: ShadowRoot | null = null
  * Every pass publishes state, so this runs often and has to be cheap and
  * idempotent. It is: preact diffs, and the host is only rebuilt when Turbo has
  * taken the old one away with the body.
+ *
+ * **A `<style>` element, not `adoptedStyleSheets`.** A constructed stylesheet
+ * is the tidier of the two and is what this did until the Firefox port, but
+ * `ShadowRoot.adoptedStyleSheets` is not reachable from a content script before
+ * Firefox 153: the property sits behind Xray vision, and the way round it was
+ * `wrappedJSObject`, which hands the page a handle on our styles. Firefox 153
+ * is weeks old and 140 is still a supported ESR, so resting the panel's whole
+ * appearance on it would mean an unstyled drawer for most Firefox readers. A
+ * `<style>` element in the shadow root is understood by every browser either
+ * target supports, is scoped identically, and costs one node.
+ *
+ * **Inside the preact tree, not appended beside it.** `render` into a container
+ * treats children it did not create as excess and removes them, so a `<style>`
+ * appended to the shadow root by hand would survive exactly until the first
+ * pass. Rendering it as a sibling of `<App>` puts it under the same diff as
+ * everything else, and because `styles` is one module constant the text node is
+ * compared by identity and never rewritten.
  */
 export function updatePanel(state: TriageState): void {
   if (state.kind === 'not-pr' || isQuiet(state)) {
     unmountPanel()
     return
   }
-  render(<App state={state} />, ensureShadowRoot())
+  render(
+    <>
+      <style>{styles}</style>
+      <App state={state} />
+    </>,
+    ensureShadowRoot(),
+  )
 }
 
 /**
@@ -53,9 +76,6 @@ function ensureShadowRoot(): ShadowRoot {
   document.body.append(host)
 
   shadowRoot = host.attachShadow({ mode: 'open' })
-  const sheet = new CSSStyleSheet()
-  sheet.replaceSync(styles)
-  shadowRoot.adoptedStyleSheets = [sheet]
   return shadowRoot
 }
 
