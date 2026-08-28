@@ -3,6 +3,7 @@ import { NO_CHECK } from '../src/count'
 import type { TriageState } from '../src/engine'
 import { updatePanel } from '../src/panel/mount'
 import { DEFAULT_PREFS } from '../src/prefs'
+import type { CodeRabbitNote } from '../src/parse/notes'
 import type { PageKind } from '../src/types'
 
 const HOST_ID = 'rabbithole-root'
@@ -19,18 +20,39 @@ afterEach(() => {
   updatePanel(state('not-pr'))
 })
 
-/** An empty page of the given kind, which is all the host cares about. */
-function state(kind: PageKind): TriageState {
+/**
+ * A page of the given kind, carrying CodeRabbit's walkthrough unless asked not
+ * to, which is all the host cares about.
+ *
+ * The note is the whole difference between a page that gets a panel and one
+ * that does not, per invariant 4. It is passed rather than defaulted silently,
+ * because a helper that quietly stopped building "an empty page" would make
+ * every case below pass for a reason it does not state.
+ */
+function state(kind: PageKind, { coderabbit = true }: { coderabbit?: boolean } = {}): TriageState {
   return {
     kind,
     threads: [],
     rows: [],
-    notes: [],
+    notes: coderabbit ? [walkthrough()] : [],
     hidden: new Set(),
     counts: { total: 0, unresolved: 0, hidden: 0, unparsed: 0 },
     check: NO_CHECK,
     prefs: DEFAULT_PREFS,
     setPrefs: () => {},
+  }
+}
+
+/**
+ * The one thing `hasCodeRabbit` reads off an otherwise empty state. Its element
+ * is never hidden here: nothing in this file runs the hide engine.
+ */
+function walkthrough(): CodeRabbitNote {
+  return {
+    el: document.createElement('div'),
+    timelineItem: null,
+    kind: 'walkthrough',
+    actionableCount: null,
   }
 }
 
@@ -87,6 +109,36 @@ describe('updatePanel', () => {
     updatePanel(state('react'))
 
     expect(host()?.shadowRoot?.querySelector('.handle.warn')).not.toBeNull()
+  })
+
+  /**
+   * Invariant 4, at the only place it is enforced. A readable pull request
+   * CodeRabbit never reviewed gets no host, so the extension leaves no trace on
+   * the page at all.
+   */
+  it('mounts nothing on a pull request CodeRabbit never touched', () => {
+    updatePanel(state('classic', { coderabbit: false }))
+
+    expect(host()).toBeNull()
+  })
+
+  // The order of the two tests in `isQuiet`, asserted rather than argued: an
+  // unreadable build also has no notes and no rows, and losing its handle would
+  // be invariant 3 failing.
+  it.each(['react', 'unknown'] as const)('keeps the handle on a %s build with no notes', (kind) => {
+    updatePanel(state(kind, { coderabbit: false }))
+
+    expect(host()?.shadowRoot?.querySelector('.handle.warn')).not.toBeNull()
+  })
+
+  it('takes the host down when CodeRabbit turns out not to be there, and puts it back', () => {
+    updatePanel(state('classic'))
+    updatePanel(state('classic', { coderabbit: false }))
+    expect(host()).toBeNull()
+
+    updatePanel(state('classic'))
+
+    expect(host()?.shadowRoot?.querySelector('.handle')).not.toBeNull()
   })
 
   it('takes the host off the page away from a pull request', () => {

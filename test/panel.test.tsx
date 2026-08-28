@@ -7,7 +7,14 @@ import type { HideVerdict } from '../src/hide/policy'
 import { forgetSessionFindings } from '../src/panel/actions'
 import { App } from '../src/panel/App'
 import { tipFitsAbove } from '../src/panel/overlay'
-import { badges, emptyState, keptReason, listedRows, unreadCount } from '../src/panel/rows'
+import {
+  badges,
+  emptyState,
+  hasCodeRabbit,
+  keptReason,
+  listedRows,
+  unreadCount,
+} from '../src/panel/rows'
 import { DEFAULT_PREFS } from '../src/prefs'
 import type { Finding, Thread, ThreadAuthors } from '../src/types'
 import { loadFixture } from './support/fixture'
@@ -270,6 +277,62 @@ describe('listedRows', () => {
   })
 })
 
+/**
+ * Invariant 4's predicate. The panel is drawn only where the extension can
+ * point at something of CodeRabbit's, so a false answer here is a pull request
+ * with no handle on it at all.
+ */
+describe('hasCodeRabbit', () => {
+  const note = { el: document.createElement('div'), timelineItem: null, kind: 'walkthrough' as const, actionableCount: null }
+
+  it('finds nothing on an empty page', () => {
+    expect(hasCodeRabbit(stateOf([]))).toBe(false)
+  })
+
+  it('takes a note as proof, with no thread on the page at all', () => {
+    expect(hasCodeRabbit(stateOf([], { notes: [note] }))).toBe(true)
+  })
+
+  it('takes a hidden thread as proof', () => {
+    expect(hasCodeRabbit(stateOf([row()]))).toBe(true)
+  })
+
+  // All four are reached past the `rootIsCodeRabbit` test, or are a thread
+  // nobody could read, which invariant 3 says must keep its warning.
+  it.each(['human-activity', 'pending', 'unparsed', 'fetch-failed'] as const)(
+    'takes a thread kept for %s as proof',
+    (reason) => {
+      expect(hasCodeRabbit(stateOf([row({ verdict: kept(reason) })]))).toBe(true)
+    },
+  )
+
+  it('does not take a thread proven to be somebody else s as proof', () => {
+    expect(hasCodeRabbit(stateOf([row({ verdict: kept('not-coderabbit') })]))).toBe(false)
+  })
+
+  /**
+   * The case that decided the shape of this predicate. GitHub collapses every
+   * resolved thread whoever wrote it, so a resolved human thread looks like a
+   * CodeRabbit one until the deferred fetch answers. Counting it as proof would
+   * draw the handle and then take it away again a round trip later.
+   */
+  it('does not take a collapsed thread as proof, because nobody has read it yet', () => {
+    const state = stateOf([row({ thread: { collapsed: true, resolved: true }, verdict: kept('collapsed') })])
+
+    expect(hasCodeRabbit(state)).toBe(false)
+  })
+
+  it('reads one proven thread out of a page full of unproven ones', () => {
+    const state = stateOf([
+      row({ verdict: kept('not-coderabbit') }),
+      row({ thread: { collapsed: true }, verdict: kept('collapsed') }),
+      row(),
+    ])
+
+    expect(hasCodeRabbit(state)).toBe(true)
+  })
+})
+
 describe('emptyState', () => {
   function empty(state: TriageState) {
     return emptyState(state, listedRows(state))
@@ -279,8 +342,13 @@ describe('emptyState', () => {
     expect(empty(stateOf([], { kind }))).toBe('unsupported')
   })
 
-  it('says there are no findings only when nothing at all was found', () => {
-    expect(empty(stateOf([]))).toBe('no-findings')
+  // Narrowed by invariant 4: a page with nothing at all on it now has no
+  // drawer to say this in, so the state a reader can actually reach is a review
+  // that posted its notes and listed nothing under them.
+  it('says there are no findings when the review posted none', () => {
+    const note = { el: document.createElement('div'), timelineItem: null, kind: 'walkthrough' as const, actionableCount: null }
+
+    expect(empty(stateOf([], { notes: [note] }))).toBe('no-findings')
   })
 
   // The distinction invariant 3 is about: a page whose threads could not be
@@ -1756,12 +1824,15 @@ describe('the actions on a row', () => {
  * has to match. `listed` is the rows drawn, `unread` the collapsed threads the
  * drawer only counts, and the two plus the human threads make up `total`.
  */
-const EXPECTED: Record<string, { listed: number; open: number; unread: number }> = {
-  'unresolved-and-resolved': { listed: 2, open: 2, unread: 10 },
-  'human-replies': { listed: 27, open: 27, unread: 76 },
-  'pending-in-batch': { listed: 8, open: 8, unread: 10 },
-  'no-coderabbit': { listed: 0, open: 0, unread: 1 },
-  resolvable: { listed: 9, open: 8, unread: 1 },
+const EXPECTED: Record<
+  string,
+  { listed: number; open: number; unread: number; coderabbit: boolean }
+> = {
+  'unresolved-and-resolved': { listed: 2, open: 2, unread: 10, coderabbit: true },
+  'human-replies': { listed: 27, open: 27, unread: 76, coderabbit: true },
+  'pending-in-batch': { listed: 8, open: 8, unread: 10, coderabbit: true },
+  'no-coderabbit': { listed: 0, open: 0, unread: 1, coderabbit: false },
+  resolvable: { listed: 9, open: 8, unread: 1, coderabbit: true },
 }
 
 describe.each(Object.entries(EXPECTED))('the drawer on %s', (name, expected) => {
@@ -1775,6 +1846,15 @@ describe.each(Object.entries(EXPECTED))('the drawer on %s', (name, expected) => 
     const stop = startEngine(doc, (published_) => (published = published_))
     stop()
     state = published as TriageState
+  })
+
+  /**
+   * The whole feature against real captures. `no-coderabbit` is the one page in
+   * the set with nothing of CodeRabbit's on it, and it answers false from the
+   * first pass rather than after its one collapsed thread has been fetched.
+   */
+  it('knows whether CodeRabbit is on this page', () => {
+    expect(hasCodeRabbit(state)).toBe(expected.coderabbit)
   })
 
   it('lists what the count says', () => {

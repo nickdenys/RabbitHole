@@ -526,7 +526,10 @@ function Empty({ kind }: { kind: EmptyState }) {
     return (
       <div class="empty">
         <p class="empty-title">No CodeRabbit findings</p>
-        <p>This pull request was read in full and holds no CodeRabbit review thread.</p>
+        <p>
+          CodeRabbit reviewed this pull request in full and posted nothing to work down. A pull
+          request it never reviewed has no drawer at all.
+        </p>
       </div>
     )
   }

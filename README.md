@@ -10,17 +10,22 @@ CodeRabbit's comments come out of the timeline and go into a side drawer, where 
 
 **The closed drawer is a tab on the page's edge** carrying the RabbitHole mark, the number still to do, and a meter of that number by severity, so three blockers and ten nitpicks do not look alike from across the screen. Hovering it widens the tab into the sentence behind those three.
 
+**On a pull request CodeRabbit never reviewed there is no tab at all**, and nothing of the extension's on the page. The test is positive proof rather than an empty list: one of CodeRabbit's own comments, or one thread the policy could attribute to it. A resolved thread does not count, whoever wrote it, because GitHub collapses those and nobody can say whose they are until the deferred fetch answers; counting them would draw the tab and take it away again a round trip later. So within one pull request the tab can appear, when CodeRabbit posts a review while you are reading it, and never disappears. Whether the extension is running at all is a separate question, answered by the toolbar icon and its `OFF` badge.
+
 It survives the way GitHub actually moves. Clicking between the tabs of one pull request keeps your progress, arriving at a different pull request is a reset rather than a merge, and leaving pull requests puts every comment back and takes the panel away. Resolved threads are read back off GitHub's own deferred thread endpoint when you open the drawer, so they list as findings like any other, and one that could not be fetched is listed as unreadable rather than dropped. See the roadmap.
 
 ## The invariants
 
-**The dangerous failure is not a broken panel. It is a page that quietly hides findings you never see.** Three rules prevent that, and they are tested.
+**The dangerous failure is not a broken panel. It is a page that quietly hides findings you never see.** Four rules prevent that, and they are tested.
 
 1. Never hide a thread that could not be parsed.
 2. Never hide a thread that cannot be positively proven to be CodeRabbit's.
 3. Always distinguish "zero findings" from "could not read this page".
+4. The panel is only ever absent from a page it has not touched.
 
 Number 3 exists because GitHub is rewriting the Conversation page in React. On a build the extension does not recognise it hides nothing, and the drawer handle says so rather than showing a reassuring empty list.
+
+Number 4 is what makes the edge tab safe to take away. A pull request CodeRabbit never reviewed gets no handle, no drawer and nothing appended to the page, which is what a reader means by an extension being quiet where it has nothing to say. That is only honest while an absent panel cannot be hiding anything, and it cannot: every route to a hide proves the comment is CodeRabbit's, so a page holding no proof is a page with an untouched timeline. An unreadable build is not this case and keeps its handle, because number 3 outranks it.
 
 ## How it works
 
@@ -28,6 +33,7 @@ Everything reads the rendered page. No API token, no backend, and the only permi
 
 * **Unresolved threads are already in the page**, so your actual worklist costs zero network requests.
 * **Resolved threads are collapsed** and show no author, so they are fetched as soon as the page settles (six at a time) through GitHub's own deferred thread endpoint, using your session cookie. This used to wait for the drawer to be opened. Starting with the page means the answers are usually already in by the time you open it, at the cost of asking GitHub on every pull request you visit rather than only the ones you triage. Private repos work without a token. The response is parsed with `DOMParser` and never injected: the panel renders text, so no sanitizer is needed. A thread whose fetch fails is listed as unreadable and stays in the timeline, because a finding nobody could read is exactly what must never disappear quietly.
+* **The panel is mounted only where there is something of CodeRabbit's**, so a repository without it pays a scan per page and nothing else: no shadow host, no stylesheet, no handle.
 * **Severity, category and effort** come from CodeRabbit's emoji prefixed triple, the first three `em` elements of the comment body. Read by position and requires the emoji, so prose that happens to say "Major" never matches.
 * **Resolve and unresolve click GitHub's own buttons.** Done state is GitHub's `data-resolved`, never local bookkeeping. A click only means the click happened: the row's tick box stays empty and the row stays under Open until a pass confirms it on the page, and the row says so rather than striking a finding through on hope. GitHub renders the button for write access, not for a session, so a row on a repository you cannot write to says that instead.
 
@@ -76,6 +82,8 @@ It is stored on its own, separately from the mode, sort, theme and load preferen
 **Category and effort read as one pill under each row**, an outline holding a coloured dot, the category in fewer words, a hair rule and the effort. They are two thirds of CodeRabbit's own first line and they arrive together, so a line each spent most of a row's height on six words. Seven categories have a hue and a short form; anything else prints in full in grey, and the words the pill dropped are on its tooltip.
 
 **The panel follows the system's light or dark setting**, and the settings sheet pins it to either one for a reader whose editor and system disagree. Every colour token is a light value and a dark one in the same declaration, so the choice is one CSS property rather than a second copy of the palette.
+
+**The panel then learned to stay away.** A readable pull request with no CodeRabbit comment and no CodeRabbit thread on it gets no host appended at all, on the rule above, which is invariant 4 and is asserted over every fixture in both hide modes.
 
 **v0.3 adds the off switch**, a background service worker and the toolbar menu described above. It is done.
 
