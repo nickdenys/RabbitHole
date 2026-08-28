@@ -91,6 +91,26 @@ export function readAuthors(threadEl: Element): ThreadAuthors | null {
 }
 
 /**
+ * Whether this one comment is CodeRabbit's, by the rule `readAuthors` applies
+ * inside a thread: exactly one readable author link, matching the account path
+ * exactly.
+ *
+ * Exists for the one read that becomes an action rather than a label. The
+ * agent prompt is copied to be pasted into a coding agent, and `readFinding`
+ * offers it only off a comment this answers true for: anyone on a pull request
+ * can write a details block whose summary reads `Prompt for AI Agents`, and a
+ * copy button that trusted the summary would hand their instructions to the
+ * reader's agent dressed as CodeRabbit's. See `readAiPrompt`.
+ *
+ * No pending check, unlike the flag inside `readAuthors`: a pending comment is
+ * the reader's own and carries the reader's author link, so it already answers
+ * false here.
+ */
+export function isCodeRabbitComment(comment: Element): boolean {
+  return readAuthorHref(comment) === CODERABBIT_HREF
+}
+
+/**
  * The account path of the comment's author, or null when there is not exactly
  * one readable answer.
  *

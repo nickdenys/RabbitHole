@@ -243,3 +243,55 @@ describe('fetchThreadHtml', () => {
     expect(helpers.calls).toHaveLength(0)
   })
 })
+
+/**
+ * The URLs come off a page attribute, so the transport is where they stop
+ * being trusted: a path is the page's own, anything else has to prove it is on
+ * the page's origin, and a refusal is a null body with no request made. See
+ * `allowedUrl` in `src/fetch/threads.ts`.
+ */
+describe('the origin guard', () => {
+  async function one(url: string): Promise<{ url: string; html: string | null }[]> {
+    const seen: { url: string; html: string | null }[] = []
+    for await (const result of fetchThreadHtml([url])) seen.push(result)
+    return seen
+  }
+
+  it('refuses an absolute URL on another origin, without touching the network', async () => {
+    const helpers = stubFetch()
+    const url = 'https://evil.example/owner/repo/pull/1/threads/9'
+
+    expect(await one(url)).toEqual([{ url, html: null }])
+    expect(helpers.calls).toHaveLength(0)
+  })
+
+  it('refuses a scheme-relative URL, which is an absolute one in a path\'s clothes', async () => {
+    const helpers = stubFetch()
+    const url = '//evil.example/owner/repo/pull/1/threads/9'
+
+    expect(await one(url)).toEqual([{ url, html: null }])
+    expect(helpers.calls).toHaveLength(0)
+  })
+
+  it('refuses what is neither a path nor a parseable URL', async () => {
+    const helpers = stubFetch()
+
+    for (const url of ['javascript:alert(1)', 'threads/9', '']) {
+      expect(await one(url)).toEqual([{ url, html: null }])
+    }
+    expect(helpers.calls).toHaveLength(0)
+  })
+
+  it('fetches an absolute URL on the page\'s own origin', async () => {
+    const helpers = stubFetch()
+    vi.stubGlobal('location', { origin: 'https://github.com', href: 'https://github.com/o/r/pull/1' })
+    const url = 'https://github.com/o/r/pull/1/threads/9'
+
+    const drained = one(url)
+    await settle()
+    expect(helpers.calls).toHaveLength(1)
+    helpers.calls[0].resolve('<div>ok</div>')
+
+    expect(await drained).toEqual([{ url, html: '<div>ok</div>' }])
+  })
+})

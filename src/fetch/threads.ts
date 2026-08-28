@@ -8,6 +8,10 @@
  *
  * **Nothing here throws.** A dead thread yields null and the rest keep coming,
  * because one failed request must never empty a worklist.
+ *
+ * **Nothing leaves the page's origin.** The URLs arrive off a page attribute,
+ * and the one module that turns page text into requests is where that text
+ * stops being trusted. See `allowedUrl`.
  */
 
 /**
@@ -105,6 +109,8 @@ interface Settled extends ThreadHtml {
  * parseable document and describes nothing.
  */
 async function fetchOne(url: string, signal?: AbortSignal): Promise<string | null> {
+  if (!allowedUrl(url)) return null
+
   try {
     const res = await fetch(url, { credentials: 'same-origin', signal })
     if (!res.ok) return null
@@ -113,5 +119,35 @@ async function fetchOne(url: string, signal?: AbortSignal): Promise<string | nul
     // Network error, an abort, or a body that could not be read. All three mean
     // the same thing to a worklist: this thread could not be read, say so.
     return null
+  }
+}
+
+/**
+ * Whether this URL may become a request at all: the page's own path, or an
+ * absolute URL on the page's own origin.
+ *
+ * The URL comes off a `data-deferred-content-url` attribute, and everything
+ * else read off the page is treated as untrusted text, so the one value that
+ * turns into a request gets the same suspicion. On every page GitHub has
+ * served it is a bare path (`/owner/repo/pull/590/threads/…`, see
+ * [[DOM reference]]), so nothing real is ever refused; anything else would aim
+ * this module's fetch wherever the attribute said. `same-origin` credentials
+ * already keep the session cookie at home, so what the guard adds is that the
+ * request itself stays there too, and a refused URL reads as a failed fetch,
+ * which to a worklist it is.
+ *
+ * A scheme-relative `//host/path` fails the first test on purpose: it is an
+ * absolute URL wearing a path's clothes. `data:` and `javascript:` parse with
+ * an origin of `"null"`, which matches no page's.
+ */
+function allowedUrl(url: string): boolean {
+  if (url.startsWith('/') && !url.startsWith('//')) return true
+
+  try {
+    return new URL(url).origin === location.origin
+  } catch {
+    // Neither a path nor a parseable absolute URL. GitHub writes no such
+    // attribute, and guessing at what it resolves to is the guard not guarding.
+    return false
   }
 }
