@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/nickdenys/RabbitHole/main/public/icons/icon128.png" alt="RabbitHole" width="96">
+
 # RabbitHole
 
 Turns a CodeRabbit review on a GitHub pull request into a checklist you work down to zero.
