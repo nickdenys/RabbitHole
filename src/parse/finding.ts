@@ -1,5 +1,5 @@
 import type { Finding, ParseProblem } from '../types'
-import { REVIEW_COMMENT } from './authors'
+import { REVIEW_COMMENT, isCodeRabbitComment } from './authors'
 import { parseTriple } from './severity'
 
 const COMMENT_BODY = '.comment-body'
@@ -57,7 +57,12 @@ export function readFinding(threadEl: Element): Finding | null {
     category: triple?.category ?? null,
     severity: triple?.severity ?? null,
     effort: triple?.effort ?? null,
-    aiPrompt: readAiPrompt(body),
+    // Only off CodeRabbit's own comment. The title and the triple are labels,
+    // read from anyone's markup because the row only shows them; the prompt is
+    // the one field the reader pastes into an agent, and offering it off a
+    // human comment would let any commenter write instructions the panel
+    // presents as CodeRabbit's. See `isCodeRabbitComment`.
+    aiPrompt: isCodeRabbitComment(root) ? readAiPrompt(body) : null,
     permalink: root.querySelector(PERMALINK)?.getAttribute('href') ?? null,
   }
 }
