@@ -111,11 +111,31 @@ function readHeadline(body: Element): string | null {
 
   for (let el = line?.nextElementSibling; el; el = el.nextElementSibling) {
     if (el.tagName !== 'P') continue
-    const text = collapse(el.textContent ?? '')
+    const text = collapse(readLead(el))
     if (text) return text.slice(0, TITLE_MAX)
   }
 
   return null
+}
+
+/**
+ * The paragraph's bold opening, which is the finding's own one-line title.
+ *
+ * CodeRabbit writes the headline as `**Title**` and then continues in the same
+ * paragraph, separated only by a `<br>`, so the whole paragraph's text reads as
+ * the title running straight into the explanation: *"Lock the batch rows before
+ * validating transitions The initial reject() runs on stale…"*. Taking the
+ * leading `<strong>` alone stops at the sentence the author meant as the title.
+ *
+ * Leading, not anywhere: a `<strong>` further in is emphasis inside the prose,
+ * and a paragraph that does not open bold has no title to separate, so all of
+ * it is taken as before. That is the case for every human written thread.
+ */
+function readLead(p: Element): string {
+  const opening = [...p.childNodes].find((node) => (node.textContent ?? '').trim() !== '')
+  const tag = opening?.nodeType === Node.ELEMENT_NODE ? (opening as Element).tagName : null
+
+  return ((tag === 'STRONG' || tag === 'B' ? opening?.textContent : p.textContent) ?? '')
 }
 
 /**

@@ -155,6 +155,31 @@ rg -n 'pyright|mypy' pyproject.toml</pre></details>
     expect(readFinding(el)!.title).toBe('Confirm the configured type checker.')
   })
 
+  it('takes the bold opening alone, not the explanation under it', () => {
+    // How CodeRabbit writes a headline: `**Title**` and the explanation in the
+    // same paragraph, split by a <br>. Reading the paragraph whole runs the two
+    // together, which is what the row showed before.
+    const el = thread(`
+      ${TRIPLE}
+      <p><strong>Lock the batch rows before validating transitions</strong><br>
+      The initial <code>reject()</code> runs on stale models, so a concurrent status change can slip past.</p>
+    `)
+
+    expect(readFinding(el)!.title).toBe('Lock the batch rows before validating transitions')
+  })
+
+  it('keeps code spans inside the bold opening', () => {
+    const el = thread(`${TRIPLE}<p><strong>Fix the <code>writable</code> summary.</strong> It says the opposite.</p>`)
+
+    expect(readFinding(el)!.title).toBe('Fix the writable summary.')
+  })
+
+  it('takes the whole paragraph when it does not open bold', () => {
+    const el = thread(`${TRIPLE}<p>Guard the payload, and see <strong>the note below</strong>.</p>`)
+
+    expect(readFinding(el)!.title).toBe('Guard the payload, and see the note below.')
+  })
+
   it('falls back to the body text, collapsed and capped, with no triple', () => {
     const el = thread(`<p>  a payload\n   validation  concern  </p><p>${'x'.repeat(200)}</p>`)
     const title = readFinding(el)!.title
