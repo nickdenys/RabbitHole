@@ -76,6 +76,25 @@ describe('updatePanel', () => {
     expect(mounted).not.toBeNull()
     expect(mounted?.shadowRoot).not.toBeNull()
     expect(mounted?.shadowRoot?.querySelector('.handle')).not.toBeNull()
+    expect(mounted?.shadowRoot?.querySelector('style')?.textContent).toContain(':host')
+  })
+
+  /**
+   * The panel is styled by a `<style>` element inside the rendered tree rather
+   * than by an adopted stylesheet, because `adoptedStyleSheets` is unreachable
+   * from a content script before Firefox 153. Asserted across passes rather
+   * than once, because the hazard is specific: preact removes container
+   * children it did not create, so a `<style>` put there any other way would
+   * survive the mount and disappear on the next pass, leaving a drawer that
+   * renders unstyled only after the page changes.
+   */
+  it('keeps exactly one style element across passes', () => {
+    updatePanel(state('classic'))
+    updatePanel(state('classic'))
+    updatePanel(state('classic'))
+
+    expect(host()?.shadowRoot?.querySelectorAll('style')).toHaveLength(1)
+    expect(host()?.shadowRoot?.querySelector('.handle')).not.toBeNull()
   })
 
   it('reuses the same host across passes', () => {

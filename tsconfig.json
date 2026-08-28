@@ -9,8 +9,10 @@
     "strict": true,
     "noEmit": true,
     "isolatedModules": true,
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "types": ["vite/client"]
   },
-  "include": ["src", "test", "vite.config.ts", "vite.background.config.ts"]
+  "include": ["src", "test", "vite.config.ts", "vite.background.config.ts", "vite.shared.ts"]
 }
