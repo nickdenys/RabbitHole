@@ -1016,3 +1016,68 @@ describe('auto-loading "Load more"', () => {
     expect(latest(states).check.missing).toBe(0)
   })
 })
+
+
+/**
+ * A permalink to one CodeRabbit comment, which is how a finding gets sent to
+ * somebody. The comment's own element carries the id GitHub puts in the
+ * fragment, so it is the anchor's first lookup.
+ */
+function linkableMarkup(id: number): string {
+  return threadMarkup(id).replace(
+    '<div class="timeline-comment-group">',
+    `<div class="timeline-comment-group" id="discussion_r${id}">`,
+  )
+}
+
+/**
+ * A document with a window of its own, which `doc` above deliberately has not
+ * got. The anchor reads the scroll offset off it and the engine binds
+ * `hashchange` to it, so the two cases below need one.
+ */
+function docWithWindow(html: string): Document {
+  return new DOMParser().parseFromString(`<html><body>${html}</body></html>`, 'text/html')
+}
+
+describe('a link to one comment', () => {
+  it('keeps the thread it names in the timeline and hides the rest', () => {
+    setUrl(`${PR_URL}#discussion_r2`)
+    const d = doc(linkableMarkup(1) + linkableMarkup(2) + linkableMarkup(3))
+    const states = engineOn(d)
+
+    const rows = latest(states).rows
+    expect(rows.map((row) => isHidden(row.thread.el))).toEqual([true, false, true])
+
+    // The policy is untouched: all three are still threads this page would
+    // rather not show, and the panel still says so.
+    expect(latest(states).counts.hidden).toBe(3)
+  })
+
+  it('follows a permalink pressed on the page, which changes nothing in the DOM', () => {
+    setUrl(PR_URL)
+    const d = docWithWindow(linkableMarkup(1) + linkableMarkup(2))
+    const states = engineOn(d)
+
+    expect(latest(states).rows.every((row) => isHidden(row.thread.el))).toBe(true)
+
+    setUrl(`${PR_URL}#discussion_r2`)
+    d.defaultView?.dispatchEvent(new Event('hashchange'))
+
+    expect(latest(states).rows.map((row) => isHidden(row.thread.el))).toEqual([true, false])
+  })
+
+  it('anchors again after a round trip through a tab it cannot read', () => {
+    setUrl(`${PR_URL}#discussion_r1`)
+    const d = doc(linkableMarkup(1))
+    const states = engineOn(d)
+
+    expect(isHidden(latest(states).rows[0].thread.el)).toBe(false)
+
+    // The Files tab drops every reveal, so coming back has to make this one
+    // again rather than remember it was already followed.
+    navigateTo(`${SAME_PR_FILES_TAB}#discussion_r1`, d)
+    navigateTo(`${PR_URL}#discussion_r1`, d)
+
+    expect(isHidden(latest(states).rows[0].thread.el)).toBe(false)
+  })
+})

@@ -1,3 +1,4 @@
+import { followAnchor, forgetAnchor } from './anchor'
 import { countCheck, NO_CHECK, type CountCheck } from './count'
 import { detectPage, pullRequestKey } from './detect'
 import { parseThreadFragment, type FetchedThread } from './fetch/parse'
@@ -300,11 +301,19 @@ export function startEngine(
   // pass rather than a debounced one.
   doc.addEventListener('turbo:load', pass)
 
+  // Following a permalink to a comment already in the page changes nothing in
+  // the DOM, so the observer never fires and no pass would run: the reader
+  // would press a link to a finding and watch the page not move. It is a click
+  // and gets the same immediate pass a navigation does.
+  const view = doc.defaultView
+  view?.addEventListener('hashchange', pass)
+
   pass()
 
   return () => {
     observer.disconnect()
     doc.removeEventListener('turbo:load', pass)
+    view?.removeEventListener('hashchange', pass)
     clearTimeout(scheduled)
     forget()
   }
@@ -330,6 +339,7 @@ export function startEngine(
  */
 function forgetPage(doc: Document): void {
   revealAll(doc)
+  forgetAnchor()
   forgetSessionFindings()
 }
 
@@ -356,6 +366,14 @@ function runPass(
   // reveal matters because Turbo can navigate from a page we did read.
   if (kind !== 'classic') {
     revealAll(doc)
+
+    // The reveal holding the anchored thread in the timeline has just been
+    // dropped, so the anchor has to go with it. Otherwise a round trip to
+    // Files changed and back, which is one pull request and therefore no
+    // reset, would come back to a fragment already anchored and leave the
+    // thread it names hidden.
+    forgetAnchor()
+
     return {
       kind,
       threads: [],
@@ -399,7 +417,15 @@ function runPass(
   // once a pass to look up something already sitting beside it.
   const hideable = rows.filter((row) => row.verdict.hide).map((row) => row.thread)
 
-  applyHiding([...hideable.map((thread) => thread.el), ...notes.map((note) => note.el)], doc)
+  const targets = [...hideable.map((thread) => thread.el), ...notes.map((note) => note.el)]
+
+  applyHiding(targets, doc)
+
+  // After the hide, never before it. `followAnchor` reveals through the set
+  // this pass just applied and then scrolls, so running it first would scroll
+  // to a comment about to be taken off the page, and measure an offset the
+  // hide immediately invalidates.
+  followAnchor(doc, url, targets)
 
   const check = countCheck(notes, rows, doc)
 

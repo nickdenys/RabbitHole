@@ -18,6 +18,7 @@ RabbitHole takes those comments out of the timeline and puts them in a side draw
 * **A count of what is left.** Closed, the drawer is a tab on the page's edge carrying the number still to do and a severity meter, so three blockers never look like ten nitpicks.
 * **Resolution that is real.** Rows resolve and reopen through GitHub's own button, and done state comes from GitHub rather than from local bookkeeping.
 * **Context without losing the list.** Press a row's title to put that one finding back in the timeline and scroll to it. Press it again to take it out.
+* **Links into the review still work.** Open a permalink to one CodeRabbit comment and that finding stays in the timeline, scrolled to, exactly as it would without the extension installed.
 * **The rest of what a row needs:** copy CodeRabbit's agent prompt, open the finding on Files changed, read its category and effort off one pill.
 * **Silence where there is nothing to say.** On a pull request CodeRabbit never reviewed there is no tab, no drawer, nothing.
 * **An off switch that means off.** A checkbox on the toolbar icon stops the extension in every open tab, immediately.
@@ -52,6 +53,8 @@ A Manifest V3 extension, panel in Preact, everything read off the rendered page.
 **Safe mode is the default: a thread is hidden only if every comment in it is CodeRabbit's.** One human reply, or one unsubmitted comment of your own, keeps it in the timeline and badges it in the panel. **Aggressive mode** hides every CodeRabbit rooted thread, as an explicit choice in settings, for teams that never discuss findings inline. Invariants 1 and 2 hold in both.
 
 **A hide reverses one finding at a time, and only by you.** No pass may reverse either direction, so a page changing under you never swallows a thread you asked to see. The panel can put a thread back on the page but never take one off it.
+
+**A permalink is one of those reversals, not an exception in the policy.** Arriving at `#discussion_r...` reveals the thread the fragment names and scrolls to it, on the same footing as pressing a row's title: the policy still hides everything else, the row is still there to put back, and nothing new is allowed to hide. A finding somebody has since resolved is collapsed and its comments are not in the page, so the link lands on the collapsed thread standing in for it, which is what you would see without the extension too. The page keeps the comment in view while "Load more" fills in the timeline above it, and stops the moment you scroll yourself.
 
 **Five preferences live in `chrome.storage.local`**, per browser and never synced: hide mode, sort axis, sort direction, theme, drawer open. They are read before the first hide pass, so a page is hidden once, in the mode you chose. Nothing about a pull request is stored, and a failed read means safe mode.
 
