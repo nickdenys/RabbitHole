@@ -8,6 +8,8 @@ CodeRabbit leaves a lot of comments in your pull request timeline. Some are bloc
 
 RabbitHole takes those comments out of the timeline and puts them in a side drawer as a task list instead.
 
+![RabbitHole's drawer open on a pull request, listing the CodeRabbit findings by severity](https://raw.githubusercontent.com/nickdenys/RabbitHole/main/docs/screenshot.png)
+
 ## What's included
 
 * **One list instead of 30 comments**, grouped by severity, sortable four ways in either direction, separate Open and Resolved tabs.
