@@ -144,7 +144,7 @@ function allowedUrl(url: string): boolean {
   if (url.startsWith('/') && !url.startsWith('//')) return true
 
   try {
-    return new URL(url).hostname.endsWith('github.com')
+    return new URL(url).origin === location.origin
   } catch {
     // Neither a path nor a parseable absolute URL. GitHub writes no such
     // attribute, and guessing at what it resolves to is the guard not guarding.
