@@ -1,6 +1,12 @@
 # Privacy policy
 
-**RabbitHole collects nothing, transmits nothing, and has no backend to send anything to.**
+**RabbitHole sends nothing to anyone. It reads the pull request you are looking
+at, on your own machine, and that reading never leaves your browser.**
+
+It does read review content, so this policy says so plainly rather than opening
+on the word "nothing". Chrome's own rules count reading and processing as
+handling user data even when nothing is transmitted, and they are right to. What
+matters to you is where it goes, and the answer is nowhere.
 
 Last updated 31 August 2026. It applies to the RabbitHole browser extension for
 Chrome and Firefox, published by Nick Denys, and to every version of it.
@@ -28,6 +34,24 @@ icon's right-click menu.
 That is the complete list. You can read it in `src/prefs.ts` and
 `src/enabled.ts`.
 
+## What is read, and where it goes
+
+The extension reads the content of the pull request page you have open: the
+review comments CodeRabbit posted, their text, their severity markers, the file
+each one points at, and the author link on each comment that proves who wrote
+it. In Chrome's store vocabulary this is **website content**, and it is declared
+as such on the listing.
+
+All of it is read and used in the page you are already on, in your own browser,
+to build the worklist and decide what to hide. **None of it is transmitted
+anywhere, to the developer or to anyone else, and none of it is written to
+storage.** It lives in memory for as long as the tab is open and goes when the
+tab does.
+
+There is no server belonging to this project to send it to, and no code in this
+extension that sends it anywhere. See "What is sent, and where" below for the
+only request it makes.
+
 ## What is not stored
 
 Nothing about any pull request, ever. No review comment, no thread id, no file
@@ -52,8 +76,10 @@ Requests are refused unless they resolve to the origin of the page you are on,
 so a URL read off the page can never become a request somewhere else. The guard
 is `allowedUrl` in `src/fetch/threads.ts`.
 
-Responses are parsed into an inert document with `DOMParser` and are never
-injected into the page.
+Responses are parsed into an inert document with `DOMParser`, read for the
+thread's comments, and never injected into the page. That parsing happens in
+your browser and its results go into the drawer on your screen and nowhere
+else.
 
 No request goes anywhere else. There is no server belonging to this project.
 
@@ -64,9 +90,10 @@ cookies set by the extension, no advertising, and no fingerprinting.
 
 ## Selling and sharing
 
-Nothing is collected, so there is nothing to sell, share, or transfer. No data
-is used for any purpose unrelated to the extension's single purpose, and none is
-used to determine creditworthiness or for lending.
+Nothing read on your machine leaves it, so there is nothing to sell, share, or
+transfer, and nothing has ever been. No data is used for any purpose unrelated
+to the extension's single purpose, and none is used to determine
+creditworthiness or for lending.
 
 ## Permissions, and why each one exists
 
@@ -85,8 +112,9 @@ Fetched HTML is parsed, never evaluated and never injected.
 
 ## Deleting what is stored
 
-Remove the extension. Your browser deletes its local storage with it. There is
-nothing held anywhere else to request the deletion of.
+Remove the extension. Your browser deletes its local storage with it. Review
+content is never persisted at all, so closing the tab is already the whole of
+its deletion. There is nothing held anywhere else to request the deletion of.
 
 ## Changes
 

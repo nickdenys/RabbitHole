@@ -42,11 +42,14 @@ A Manifest V3 extension for Chrome and Firefox, panel in Preact, everything read
 
 ## Privacy
 
-Nothing is collected and nothing is transmitted. Six preferences and an on/off
-switch live in `chrome.storage.local` on your own machine, and no comment,
-thread, repository or username is ever written anywhere. The only request the
-extension makes is to GitHub's own deferred thread endpoint, on your own
-session, for the page you already have open. See [`PRIVACY.md`](PRIVACY.md).
+The extension reads the review comments on the page you have open, in your own
+browser, and that reading never leaves it. Nothing is transmitted to anyone and
+nothing about any pull request is written down: no comment, thread, repository
+or username. Six preferences and an on/off switch live in
+`chrome.storage.local`, and that is the whole of what is stored. The only
+request the extension makes is to GitHub's own deferred thread endpoint, on your
+own session, for the page you already have open. See
+[`PRIVACY.md`](PRIVACY.md).
 
 ## Development
 

@@ -55,7 +55,7 @@ NO ACCOUNT, NO BACKEND, NO TRACKING
 
 There is no login, no API token, and no server belonging to this project. Your worklist is read off the page you already have open. Resolved threads are fetched from GitHub's own endpoint on your own session, the same request your browser makes when you click a collapsed thread open. Nothing else is ever requested.
 
-Six preferences and an on/off switch are stored locally in your browser. Nothing about any pull request is stored: no comment, no repository name, no username, and no record of what you have read. No analytics, no telemetry, no advertising.
+RabbitHole reads the review comments on the page you have open, in your browser, to build the list. That reading never leaves your machine and is never written down: no comment, no repository name, no username, and no record of what you have read. Only six display preferences and an on/off switch are stored. No analytics, no telemetry, no advertising.
 
 The full source is at https://github.com/nickdenys/RabbitHole and the privacy policy is at https://github.com/nickdenys/RabbitHole/blob/main/PRIVACY.md
 
@@ -115,12 +115,33 @@ that HTML is parsed into an inert document with `DOMParser` and never injected
 or evaluated. The transport refuses any URL that does not resolve to the page's
 own origin (`allowedUrl` in `src/fetch/threads.ts`).
 
-**Data usage:** none of the categories are checked. Personally identifiable
-information, health information, financial and payment information,
-authentication information, personal communications, location, web history, and
-user activity are all unchecked, and so is website content.
+**Data usage: check "Website content". Leave the other eight unchecked.**
 
-Then the three certifications, all true:
+This was answered the other way round on 31 August and it was wrong. Chrome does
+not exempt local-only handling: "Extensions are required to disclose how they
+handle user data, even when data is processed or stored locally on a user's
+device and is not transmitted to external servers or third parties", where
+*handle* is defined as "collecting, transmitting, using, or sharing". Reading a
+page counts. See the [user data FAQ](https://developer.chrome.com/docs/webstore/program-policies/user-data-faq).
+
+* **Website content — checked.** The extension reads CodeRabbit's review
+  comments off the pull request page, and reads the HTML that GitHub's deferred
+  thread endpoint returns for collapsed threads. Comment text, severity markers,
+  file paths and author links are all website content under Chrome's definition.
+  All of it is processed in the browser and none of it is transmitted or stored.
+* **Personally identifiable information — unchecked.** The extension reads the
+  author link on a comment only to prove the comment is CodeRabbit's. It is not
+  collected, kept, or used to identify anybody.
+* **Authentication information — unchecked.** The deferred fetch is sent with
+  `credentials: 'same-origin'`, so the browser attaches your existing GitHub
+  session itself. The extension never reads, stores or handles the cookie.
+* **Web history — unchecked.** No list of pages visited is read or kept. The
+  extension knows only the pull request in the tab it is running in.
+* **Personal communications, health, financial, location, user activity —
+  unchecked.** None are touched. Code review comments on a repository are page
+  content, not a messaging channel.
+
+The three certifications stay true and all three are ticked:
 
 * Not being sold to third parties, outside of approved use cases.
 * Not being used or transferred for purposes unrelated to the item's single purpose.
