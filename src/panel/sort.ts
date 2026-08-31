@@ -135,7 +135,7 @@ const NO_CATEGORY = 'No category stated'
  */
 export function sortRows(rows: TriageRow[], axis: SortAxis, leading = true): TriageRow[] {
   const compare = COMPARATORS[axis]
-  return [...rows].sort(leading ? compare : (a, b) => -compare(a, b))
+  return rows.sort(leading ? compare : (a, b) => -compare(a, b))
 }
 
 /**

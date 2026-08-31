@@ -155,8 +155,6 @@ export function useTip(): [Tip | null, TipBinder] {
   const [tip, setTip] = useState<Tip | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  useLayoutEffect(() => () => clearTimeout(timer.current), [])
-
   function show(target: Element, text: string, delay: number): void {
     clearTimeout(timer.current)
     if (delay === 0) {

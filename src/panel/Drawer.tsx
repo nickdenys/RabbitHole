@@ -128,7 +128,7 @@ export function Drawer({ state, listed, theme, onTheme, onClose }: DrawerProps) 
   const openRows = useMemo(() => listed.filter((row) => !row.thread.resolved), [listed])
   const doneRows = useMemo(() => listed.filter((row) => row.thread.resolved), [listed])
   const shown = tab === 'open' ? openRows : doneRows
-  const groups = useMemo(() => groupRows(sortRows(shown, axis, leading), axis), [shown, axis, leading])
+  const groups = useMemo(() => groupRows(sortRows(shown, axis, leading), axis), [shown, axis])
 
   const unread = unreadCount(state)
   const warnings = warningsOf(state)
