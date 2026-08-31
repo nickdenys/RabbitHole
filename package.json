@@ -1,6 +1,6 @@
 {
   "name": "rabbithole",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Browser extension that turns CodeRabbit review comments into a triage worklist on GitHub pull requests.",

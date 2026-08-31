@@ -57,13 +57,37 @@ const GECKO_MIN_VERSION = '128.0'
  *
  * Required of every new AMO submission since 3 November 2025, and `["none"]` is
  * the declared way to say none rather than the value you get by omitting the
- * key. It is a claim about transmission, not about storage: the five
+ * key. It is a claim about transmission, not about storage: the six
  * preferences in `chrome.storage.local` never leave the browser, and the only
  * request this extension makes is to GitHub's own deferred thread endpoint, on
  * the reader's own session, for the page they already have open. There is no
  * backend to send anything to. See `src/prefs.ts` and `src/fetch/threads.ts`.
  */
 const GECKO_DATA_COLLECTION = { required: ['none'] }
+
+/**
+ * The oldest Chrome this build is claimed to work on, set by the same rule that
+ * set Firefox's 128 rather than by MV3.
+ *
+ * MV3 itself lands in Chrome 88, and stopping there would be a build that
+ * installs and then draws itself in no colour at all: `panel.css` is written
+ * entirely in `light-dark()`, which lands in Chrome 123. A reader below that
+ * gets told plainly by the store that this extension is not for their browser,
+ * which is the honest failure rather than the silent one.
+ *
+ * Chrome only. Firefox reads `strict_min_version` out of
+ * `browser_specific_settings` instead, and warns about keys it does not know.
+ */
+const CHROME_MIN_VERSION = '123'
+
+/**
+ * Where a reader goes to read the code, which is the whole of this project's
+ * privacy story and most of its documentation.
+ *
+ * Shared by both manifests. Chrome shows it as the listing's "Website" and
+ * AMO as the add-on's homepage, so one URL answers both.
+ */
+const HOMEPAGE_URL = 'https://github.com/nickdenys/RabbitHole'
 
 const ICONS = {
   '16': 'icons/icon16.png',
@@ -75,8 +99,8 @@ const ICONS = {
 /**
  * The manifest for one target, as an object ready to be serialised.
  *
- * Everything outside the `switch` is shared by construction rather than by
- * being copied and kept in step.
+ * Everything outside the `platform` spread is shared by construction rather
+ * than by being copied and kept in step.
  */
 export function manifest(target: Target): Record<string, unknown> {
   return {
@@ -91,9 +115,10 @@ export function manifest(target: Target): Record<string, unknown> {
     // sentences, and neither is the other's summary.
     description: 'Turns CodeRabbit review comments into a triage worklist on GitHub pull requests.',
     permissions: ['storage', 'contextMenus'],
+    homepage_url: HOMEPAGE_URL,
     icons: ICONS,
     action: { default_icon: ICONS },
-    ...background(target),
+    ...platform(target),
     content_scripts: [
       {
         matches: ['https://github.com/*'],
@@ -105,7 +130,8 @@ export function manifest(target: Target): Record<string, unknown> {
 }
 
 /**
- * The one part of the manifest the two browsers genuinely disagree about.
+ * Everything the two browsers genuinely disagree about, which is how the
+ * background script is declared and where each store keeps its floor.
  *
  * Chrome runs MV3 background code as a service worker. Firefox does not
  * implement `background.service_worker` at all and runs an event page from
@@ -117,8 +143,14 @@ export function manifest(target: Target): Record<string, unknown> {
  * `background.ts` imports nothing and Firefox's support for module event pages
  * is not documented well enough to rest a build on. See
  * `vite.background.config.ts`.
+ *
+ * The two minimum versions say the same thing in each store's own key, and both
+ * are set by `light-dark()` rather than by MV3. Neither key is portable:
+ * `minimum_chrome_version` is a top level Chrome key, `strict_min_version`
+ * lives under `browser_specific_settings.gecko`, and each browser warns about
+ * the other's.
  */
-function background(target: Target): Record<string, unknown> {
+function platform(target: Target): Record<string, unknown> {
   if (target === 'firefox') {
     return {
       background: { scripts: ['background.js'] },
@@ -132,5 +164,8 @@ function background(target: Target): Record<string, unknown> {
     }
   }
 
-  return { background: { service_worker: 'background.js' } }
+  return {
+    background: { service_worker: 'background.js' },
+    minimum_chrome_version: CHROME_MIN_VERSION,
+  }
 }
