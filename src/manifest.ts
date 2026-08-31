@@ -53,15 +53,35 @@ const GECKO_ID = 'rabbithole@nickdenys.github.io'
 const GECKO_MIN_VERSION = '128.0'
 
 /**
- * What this extension collects and transmits, which is nothing.
+ * What this extension transmits, which is nothing.
  *
  * Required of every new AMO submission since 3 November 2025, and `["none"]` is
  * the declared way to say none rather than the value you get by omitting the
- * key. It is a claim about transmission, not about storage: the six
- * preferences in `chrome.storage.local` never leave the browser, and the only
- * request this extension makes is to GitHub's own deferred thread endpoint, on
- * the reader's own session, for the page they already have open. There is no
- * backend to send anything to. See `src/prefs.ts` and `src/fetch/threads.ts`.
+ * key.
+ *
+ * **This deliberately does not match the Chrome listing, which declares
+ * "Website content". The two stores ask different questions.** Chrome's rule is
+ * that "extensions are required to disclose how they handle user data, even
+ * when data is processed or stored locally on a user's device and is not
+ * transmitted", with `handle` meaning "collecting, transmitting, using, or
+ * sharing". Reading the page is handling, so Chrome is told about it. Mozilla
+ * scopes the declaration to transmission and defines that as "any data
+ * collected, used, transferred, shared, or handled **outside the add-on or the
+ * local browser**". Nothing here is handled outside the local browser, so the
+ * honest answer to Mozilla's question is none.
+ *
+ * What that rests on: the six preferences in `chrome.storage.local` never leave
+ * the browser; review content is read, used to build the worklist, and dropped
+ * with the tab; and the only request this extension makes is to GitHub's own
+ * deferred thread endpoint, on the reader's own session, for the page they
+ * already have open, which fetches GitHub's content *in* rather than sending
+ * the reader's data *out*. There is no backend to send anything to.
+ *
+ * Checked against both stores' policies on 31 August 2026. If AMO ever reads
+ * its own question the way Chrome reads theirs, this becomes
+ * `['websiteContent']` and `PRIVACY.md` needs no change, since it already
+ * describes the reading. See `src/prefs.ts`, `src/fetch/threads.ts` and
+ * `docs/store-listing.md`.
  */
 const GECKO_DATA_COLLECTION = { required: ['none'] }
 

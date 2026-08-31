@@ -49,7 +49,7 @@ A CodeRabbit thread that a person has replied to is left in the timeline, becaus
 
 On any page without a CodeRabbit review, the extension does nothing at all and shows nothing.
 
-You can turn it off entirely from the checkbox on its toolbar icon's right-click menu. The icon shows OFF when you have.
+You can turn it off entirely from the checkbox on its toolbar icon's right-click menu. The icon shows OFF while it is turned off.
 
 NO ACCOUNT, NO BACKEND, NO TRACKING
 
