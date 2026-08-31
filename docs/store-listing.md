@@ -132,9 +132,18 @@ page counts. See the [user data FAQ](https://developer.chrome.com/docs/webstore/
 * **Personally identifiable information — unchecked.** The extension reads the
   author link on a comment only to prove the comment is CodeRabbit's. It is not
   collected, kept, or used to identify anybody.
-* **Authentication information — unchecked.** The deferred fetch is sent with
-  `credentials: 'same-origin'`, so the browser attaches your existing GitHub
-  session itself. The extension never reads, stores or handles the cookie.
+* **Authentication information — unchecked, and this is the closest call.**
+  Chrome defines the category as "logins, password, and authentication
+  cookies", so the session cookie is squarely in scope as a *thing*. The
+  extension still does not handle it. It declares only `storage` and
+  `contextMenus`, has no `cookies` permission, and therefore cannot read the
+  cookie's value at any point. `credentials: 'same-origin'` in
+  `src/fetch/threads.ts` is the browser's own default for `fetch`, so the
+  cookie is attached by the browser to a same-origin request exactly as it is
+  for every request the GitHub page makes itself. It is never read, stored,
+  copied, or sent anywhere but back to the origin that issued it. The
+  extension causes a credentialed request; it does not collect, use or share a
+  credential.
 * **Web history — unchecked.** No list of pages visited is read or kept. The
   extension knows only the pull request in the tab it is running in.
 * **Personal communications, health, financial, location, user activity —
