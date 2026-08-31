@@ -81,7 +81,7 @@ const GECKO_MIN_VERSION = '128.0'
  * its own question the way Chrome reads theirs, this becomes
  * `['websiteContent']` and `PRIVACY.md` needs no change, since it already
  * describes the reading. See `src/prefs.ts`, `src/fetch/threads.ts` and
- * `docs/store-listing.md`.
+ * the `Store listing` note.
  */
 const GECKO_DATA_COLLECTION = { required: ['none'] }
 
