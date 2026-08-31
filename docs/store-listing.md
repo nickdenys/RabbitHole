@@ -115,7 +115,7 @@ that HTML is parsed into an inert document with `DOMParser` and never injected
 or evaluated. The transport refuses any URL that does not resolve to the page's
 own origin (`allowedUrl` in `src/fetch/threads.ts`).
 
-**Data usage: check "Website content". Leave the other eight unchecked.**
+**Data usage: check "Website content" and "Personally identifiable information". Leave the other seven unchecked.**
 
 This was answered the other way round on 31 August and it was wrong. Chrome does
 not exempt local-only handling: "Extensions are required to disclose how they
@@ -129,9 +129,25 @@ page counts. See the [user data FAQ](https://developer.chrome.com/docs/webstore/
   thread endpoint returns for collapsed threads. Comment text, severity markers,
   file paths and author links are all website content under Chrome's definition.
   All of it is processed in the browser and none of it is transmitted or stored.
-* **Personally identifiable information — unchecked.** The extension reads the
-  author link on a comment only to prove the comment is CodeRabbit's. It is not
-  collected, kept, or used to identify anybody.
+* **Personally identifiable information — checked, on the strict reading.**
+  Chrome's definition names "username", and `readAuthors` in
+  `src/parse/authors.ts` reads the `a.author` href on every comment in a
+  thread, which for a person is their GitHub username. Declared for the same
+  reason website content is: Chrome counts reading as handling.
+
+  The honest description of what happens to it, ready if a reviewer asks: the
+  href is compared for exact equality against the single constant
+  `/apps/coderabbitai` and then discarded. What survives the function is
+  `ThreadAuthors`, which holds counts and booleans and no identifier of any
+  kind. The extension cannot report who wrote a comment; it can only report
+  whether CodeRabbit did. Nothing identifying is stored, displayed in the
+  drawer, or transmitted.
+
+  There is a real argument that this is a membership test against a known bot
+  account rather than handling anybody's identity, and that the category
+  overstates it. It is declared anyway: an under-declaration is a policy strike
+  after listing, an over-declaration is a line of text, and the two are not
+  worth trading.
 * **Authentication information — unchecked, and this is the closest call.**
   Chrome defines the category as "logins, password, and authentication
   cookies", so the session cookie is squarely in scope as a *thing*. The

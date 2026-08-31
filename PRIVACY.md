@@ -39,8 +39,14 @@ That is the complete list. You can read it in `src/prefs.ts` and
 The extension reads the content of the pull request page you have open: the
 review comments CodeRabbit posted, their text, their severity markers, the file
 each one points at, and the author link on each comment that proves who wrote
-it. In Chrome's store vocabulary this is **website content**, and it is declared
-as such on the listing.
+it. In Chrome's store vocabulary that is **website content**, and the author
+link is also **personally identifiable information**, since it carries a GitHub
+username. Both are declared on the listing.
+
+The author link is compared for exact equality against CodeRabbit's own account
+path and then dropped. What is kept from it is a count and a yes or no, so the
+extension can tell you whether CodeRabbit wrote a comment and cannot tell you
+who else did.
 
 All of it is read and used in the page you are already on, in your own browser,
 to build the worklist and decide what to hide. **None of it is transmitted
