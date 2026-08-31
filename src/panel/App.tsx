@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'preact/hooks'
+import { useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks'
 import type { TriageRow, TriageState } from '../engine'
 import type { Severity } from '../types'
 import { Drawer } from './Drawer'
@@ -80,8 +80,23 @@ export function App({ state }: AppProps) {
   }
 
   const readable = state.kind === 'classic'
-  const listed = readable ? listedRows(state) : []
-  const todo = listed.filter((row) => !row.thread.resolved)
+
+  /**
+   * The worklist, and the open half of it.
+   *
+   * Memoised on the state object, which is a new one on every pass and never
+   * mutated in place, so the identity is exactly the "has the page changed"
+   * question these two answer to. The saving is not about passes: it is about
+   * the renders that are not passes. This component holds the tooltip, so
+   * every hover on any control in any row redraws it, and without this a
+   * pointer crossing a long worklist rebuilt the list and re-derived the whole
+   * drawer under it on each control it passed. See `useTip` in `overlay.ts`.
+   *
+   * `listed` is handed to the drawer as well, so this keeps its identity
+   * stable across those hovers and the drawer's own memos hold with it.
+   */
+  const listed = useMemo(() => (readable ? listedRows(state) : []), [state])
+  const todo = useMemo(() => listed.filter((row) => !row.thread.resolved), [listed])
   // Only the shortfall the reader can act on. A page GitHub has half rendered
   // is a list not to be trusted and the handle says so; a total CodeRabbit
   // counted higher than it posted is a list holding every finding there is,
@@ -120,7 +135,7 @@ export function App({ state }: AppProps) {
   // The label and the meter draw the same tally twice, so it is counted once.
   // A pass publishes a new state on every mutation of the page, which is a
   // render, which was two walks of the worklist building two identical maps.
-  const parts = readable ? breakdown(todo) : []
+  const parts = useMemo(() => (readable ? breakdown(todo) : []), [todo])
 
   return (
     <div class={open ? `panel theme-${theme} open` : `panel theme-${theme}`}>

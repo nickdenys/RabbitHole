@@ -1,4 +1,4 @@
-import { useContext, useLayoutEffect, useRef, useState } from 'preact/hooks'
+import { useContext, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks'
 import type { TriageRow, TriageState } from '../engine'
 import { Mark } from './Mark'
 import { Tips, useDismiss } from './overlay'
@@ -109,11 +109,28 @@ export function Drawer({ state, listed, theme, onTheme, onClose }: DrawerProps) 
 
   const empty = emptyState(state, listed)
   const unsupported = empty === 'unsupported'
-  const openRows = listed.filter((row) => !row.thread.resolved)
-  const doneRows = listed.filter((row) => row.thread.resolved)
+
+  /**
+   * The two halves of the worklist, and the shown half cut into its groups.
+   *
+   * Memoised because this drawer redraws far more often than the page changes.
+   * The panel's one tooltip is held by `App` above it, so hovering any control
+   * on any row rerenders the whole panel, and copying and sorting the whole
+   * worklist on mouse-over is the one derivation here expensive enough to
+   * notice: on three of the four axes every comparison of that sort goes
+   * through the collator. See `useTip` in `overlay.ts`.
+   *
+   * `listed` arrives already memoised on the published state, so its identity
+   * only moves when a pass has actually read a new page, and the two counts
+   * the tabs carry stay stable with it. The axis, the direction and the tab are
+   * the reader's own choices, and each of them genuinely is a new order.
+   */
+  const openRows = useMemo(() => listed.filter((row) => !row.thread.resolved), [listed])
+  const doneRows = useMemo(() => listed.filter((row) => row.thread.resolved), [listed])
   const shown = tab === 'open' ? openRows : doneRows
+  const groups = useMemo(() => groupRows(sortRows(shown, axis, leading), axis), [shown, axis, leading])
+
   const unread = unreadCount(state)
-  const groups = groupRows(sortRows(shown, axis, leading), axis)
   const warnings = warningsOf(state)
 
   // The whole-page states outrank the tab, and only the Open tab draws the two
