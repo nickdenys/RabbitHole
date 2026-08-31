@@ -62,7 +62,7 @@ function isEvidence(row: TriageRow): boolean {
  * review that posted its walkthrough and its summary and listed nothing under
  * them. See `hasCodeRabbit`.
  */
-export type EmptyState = 'unsupported' | 'no-findings' | 'all-done'
+export type EmptyState = 'unsupported' | 'incomplete' | 'no-findings' | 'all-done'
 
 /**
  * The rows the drawer lists, which is not every thread on the page.
@@ -146,7 +146,7 @@ function isUnread(row: TriageRow): boolean {
  * Null when there is a list to draw, and null as well when the count check is
  * warning.
  *
- * Both remaining states are claims about completeness. "No CodeRabbit findings"
+ * The last two states are claims about completeness. "No CodeRabbit findings"
  * says the page was read in full, and "nothing left to do" says every finding
  * on it is closed, and the check firing is CodeRabbit's own total saying neither
  * is true. Drawing one of them under the warning would put the reassuring
@@ -156,10 +156,36 @@ function isUnread(row: TriageRow): boolean {
  * The warning notice says what is wrong and how many are missing, so nothing is
  * lost by staying quiet here. `unsupported` still wins, because a build that
  * could not be read has no counts to compare in the first place.
+ *
+ * **`incomplete` sits above both completeness claims for the same reason the
+ * warning does, and it is the case a number cannot catch.** Found 31 August
+ * 2026 on [leynos/cuprum#234](https://github.com/leynos/cuprum/pull/234), a
+ * pull request with roughly 102 findings, where the drawer said CodeRabbit had
+ * posted nothing. GitHub renders a long timeline in chunks; on that page the
+ * walkthrough is in the first chunk, which is what mounts the panel, and every
+ * `Actionable comments posted: N` is in the collapsed middle along with the
+ * threads. So `claimed` is null, `countCheck` stays quiet by design because it
+ * has nothing to compare against, and the fall-through was the most reassuring
+ * sentence in the panel on the emptiest possible reading of the page.
+ *
+ * `check.more` is the fact that fixes it: GitHub's own "Load more" is still in
+ * the page, so there is timeline this extension has not seen, and a completeness
+ * claim over an admittedly partial page is not one it may make. It is asked
+ * before the two claims and never before the warning, which is the more specific
+ * statement whenever both are true.
+ *
+ * The 28 August reasoning behind `countCheck` assumed the summary was always in
+ * the first chunk. That held for every fixture, because all five were captured
+ * with the timeline expanded by hand. It is not true of a long pull request as a
+ * reader actually meets it. See the 31 August [[Decision log]] entry.
  */
 export function emptyState(state: TriageState, listed: TriageRow[]): EmptyState | null {
   if (state.kind !== 'classic') return 'unsupported'
   if (state.check.missing > 0) return null
+
+  const claimsCompleteness = listed.length === 0 || listed.every((row) => row.thread.resolved)
+  if (claimsCompleteness && state.check.more) return 'incomplete'
+
   if (listed.length === 0 && unreadCount(state) === 0) return 'no-findings'
   if (listed.every((row) => row.thread.resolved)) return 'all-done'
   return null

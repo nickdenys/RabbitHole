@@ -89,6 +89,48 @@ committed file, taken by walking the fixture rather than by reading the page.
 | `pending-in-batch.html` | [InseeFrLab/onyxia#1072](https://github.com/InseeFrLab/onyxia/pull/1072) | 19 | 10 | 8, plus 2 pending comments | 11 | 1.8 MB |
 | `no-coderabbit.html` | [laravel/framework#54450](https://github.com/laravel/framework/pull/54450) | 3 | 1 | none, zero CodeRabbit anywhere | 2 | 800 KB |
 | `resolvable.html` | [nickdenys/optios-booking#1](https://github.com/nickdenys/optios-booking/pull/1) | 10 | 2 | 8, each with a resolve form | 0 | 1.6 MB |
+| `partial-timeline.html` | [leynos/cuprum#234](https://github.com/leynos/cuprum/pull/234) | 1 | 1, collapsed | none rendered yet | 0 | 553 KB |
+
+### `partial-timeline.html` is the page as a reader meets it
+
+**Captured 31 August 2026, and it breaks two of the rules above on purpose.** It
+is the same pull request as `human-replies.html` and it is not a duplicate of
+it: that one was captured with the whole 316 item timeline expanded by hand, and
+this one is what GitHub actually serves on the first paint.
+
+It exists because every other fixture was captured expanded, which meant the
+suite had never seen a partial timeline, which is the state a long pull request
+is in for every reader every time. **That gap hid a real bug.** On this page the
+walkthrough is in the first chunk and every `Actionable comments posted: N` is
+not, so `claimed` is null, the count check has nothing to compare and stays
+quiet by design, and the drawer fell through to "CodeRabbit reviewed this pull
+request in full and posted nothing to work down" on a review of roughly 102
+findings. The page says `506 hidden items` on the button while the drawer said
+there was nothing to find. See the 31 August [[Decision log]] entry.
+
+What it holds: 57 of 563 timeline items, one collapsed thread, CodeRabbit's
+walkthrough, one `.ajax-pagination-form`, and no actionable count anywhere.
+
+**Deviation 1, captured logged out.** The rule above exists because an anonymous
+capture loses everything GitHub renders for a signed in reader, the resolve form
+above all. Nothing is lost here: cuprum is a stranger's repository, so GitHub
+renders no resolve form for this reader either way, and `resolvable.html`
+remains the only fixture that has any. What this file is for is the chunk
+boundary, which is the same for everyone.
+
+**Deviation 2, captured by fetching the URL** rather than by pasting
+`scripts/capture-fixture.js` into the console, for the same reason the deferred
+fragments were: the console script cannot capture a page without first loading
+it in a browser, and loading it in a browser is what makes the timeline start
+expanding. The same transformation was applied, parent of the first
+`.js-timeline-item`, every `<script>` removed, every `authenticity_token`
+blanked, templates walked recursively, and 60 tokens were redacted with none
+left.
+
+**Recapture with care.** GitHub's chunk size is not a promise, so the numbers
+above will move. What has to stay true for this fixture to be worth keeping is
+the shape: a `.ajax-pagination-form` in the page, and no `Actionable comments
+posted:` anywhere in it.
 
 ### There is no React fixture, on purpose
 

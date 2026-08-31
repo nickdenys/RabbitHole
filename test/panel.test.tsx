@@ -364,6 +364,55 @@ describe('emptyState', () => {
   it('says nothing at all while there is work left', () => {
     expect(empty(stateOf([row()]))).toBeNull()
   })
+
+  /**
+   * The 31 August regression, and the reason `check.more` is read here at all.
+   *
+   * On leynos/cuprum#234 GitHub withheld the chunk carrying every
+   * `Actionable comments posted: N`, so `claimed` was null, the count check had
+   * nothing to compare and stayed quiet by design, and a review of roughly 102
+   * findings was reported as a review that posted none. A "Load more" still in
+   * the page is the fact that catches it: there is timeline this extension has
+   * not seen, so it may not claim it read the page in full.
+   */
+  it('does not claim there are no findings while GitHub is still holding timeline back', () => {
+    const note = { el: document.createElement('div'), timelineItem: null, kind: 'walkthrough' as const, actionableCount: null }
+    const partial = { claimed: null, found: 0, missing: 0, more: true }
+
+    expect(empty(stateOf([], { notes: [note], check: partial }))).toBe('incomplete')
+  })
+
+  /** The same guard over the other completeness claim, which is as wrong. */
+  it('does not claim the work is done while GitHub is still holding timeline back', () => {
+    const partial = { claimed: null, found: 1, missing: 0, more: true }
+
+    expect(empty(stateOf([row({ thread: { resolved: true } })], { check: partial }))).toBe('incomplete')
+  })
+
+  /**
+   * The warning is the more specific statement, so it keeps precedence. A
+   * shortfall names a number and a button; "not fully loaded" names neither.
+   */
+  it('leaves the count warning in front of the incomplete notice', () => {
+    const short = { claimed: 9, found: 0, missing: 9, more: true }
+
+    expect(empty(stateOf([], { check: short }))).toBeNull()
+  })
+
+  /** And an unreadable build still wins over both, having no counts at all. */
+  it('puts an unreadable build ahead of the incomplete notice', () => {
+    const partial = { claimed: null, found: 0, missing: 0, more: true }
+
+    expect(empty(stateOf([], { kind: 'react', check: partial }))).toBe('unsupported')
+  })
+
+  /** With the timeline fully handed over, the ordinary claims are honest again. */
+  it('says there are no findings once nothing is left to load', () => {
+    const note = { el: document.createElement('div'), timelineItem: null, kind: 'walkthrough' as const, actionableCount: null }
+    const done = { claimed: null, found: 0, missing: 0, more: false }
+
+    expect(empty(stateOf([], { notes: [note], check: done }))).toBe('no-findings')
+  })
 })
 
 describe('badges', () => {

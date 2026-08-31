@@ -8,6 +8,7 @@ import {
   toggleInTimeline,
 } from '../src/panel/actions'
 import { fixtureNames, loadFixture, loadFragment } from './support/fixture'
+import { emptyState, listedRows } from '../src/panel/rows'
 
 const HIDDEN = '.rh-hidden'
 const STYLE_ID = 'rabbithole-style'
@@ -155,6 +156,10 @@ const COUNTS = {
   'pending-in-batch': { total: 19, unresolved: 9, hidden: 7, unparsed: 0, notes: 7 },
   'no-coderabbit': { total: 3, unresolved: 2, hidden: 0, unparsed: 0, notes: 0 },
   'resolvable': { total: 10, unresolved: 8, hidden: 9, unparsed: 0, notes: 3 },
+  // The 31 August capture, and the only one taken as a reader meets the page:
+  // 57 timeline items of a 563 item timeline, so one thread and the walkthrough
+  // are all GitHub has handed over. See `test/fixtures/README.md`.
+  'partial-timeline': { total: 1, unresolved: 0, hidden: 0, unparsed: 0, notes: 1 },
 } as const
 
 const NAMES = fixtureNames()
@@ -210,6 +215,21 @@ describe.each(NAMES)('%s', (name) => {
   it('reports every hidden thread by id', () => {
     expect(state.hidden.size).toBe(expected.hidden)
     expect(state.hidden.has('')).toBe(false)
+  })
+
+  /**
+   * **The 31 August regression, over a real page rather than a built state.**
+   *
+   * `partial-timeline.html` is the only fixture GitHub has not finished
+   * handing over, and every completeness claim is false on it. The others are
+   * all captured expanded, so `more` is false and this asserts they are still
+   * allowed to make theirs.
+   */
+  it('never claims completeness while GitHub is still holding timeline back', () => {
+    const answer = emptyState(state, listedRows(state))
+
+    if (state.check.more) expect(answer).toBe('incomplete')
+    else expect(answer).not.toBe('incomplete')
   })
 })
 
@@ -921,6 +941,14 @@ describe('the hide mode', () => {
   })
 })
 
+/**
+ * A thread nobody can attribute to CodeRabbit, for the pages this extension is
+ * supposed to leave entirely alone.
+ */
+function humanThreadMarkup(id: number): string {
+  return threadMarkup(id).replace('/apps/coderabbitai">coderabbitai', '/nickdenys">nickdenys')
+}
+
 /** CodeRabbit's summary, claiming `count` findings. */
 function noteMarkup(count: number): string {
   return `
@@ -1004,16 +1032,64 @@ describe('auto-loading "Load more"', () => {
     expect(d.querySelector('.ajax-pagination-form')).not.toBeNull()
   })
 
-  it('does nothing on a page where nothing is missing', async () => {
+  /**
+   * **Changed 31 August 2026, and it used to assert the bug.**
+   *
+   * The old rule was "click only when CodeRabbit's total exceeds what the page
+   * holds", and this case was written to prove a page with nothing missing is
+   * left alone. It also described the deadlock: that total is itself a comment
+   * in the timeline, so on a long pull request GitHub withholds the chunk
+   * carrying every `Actionable comments posted: N`, `claimed` is null, `missing`
+   * is 0, and the press that would have loaded the chunk was waiting on a number
+   * inside it. Observed on leynos/cuprum#234.
+   *
+   * A "Load more" in the page means there is timeline nobody has seen, which is
+   * reason enough on its own.
+   */
+  it('clicks it even when nothing is missing, because the total is in the timeline too', async () => {
     const d = doc(threadMarkup(1) + noteMarkup(1))
     paginationControl(d, '')
 
     const states = engineOn(d)
     await settle()
 
-    // The control was never clicked, because there was never a gap to close.
-    expect(d.querySelector('.ajax-pagination-form')).not.toBeNull()
+    expect(d.querySelector('.ajax-pagination-form')).toBeNull()
     expect(latest(states).check.missing).toBe(0)
+  })
+
+  /**
+   * The case that keeps the new trigger inside invariant 4. A pull request
+   * CodeRabbit never reviewed is a page this extension does not touch, and
+   * paginating it would be touching it: the reader would watch a timeline
+   * expand itself for an extension that has nothing to say there.
+   */
+  it('never clicks it on a page with nothing of CodeRabbit\'s', async () => {
+    const d = doc(humanThreadMarkup(1))
+    paginationControl(d, '')
+
+    const states = engineOn(d)
+    await settle()
+
+    expect(d.querySelector('.ajax-pagination-form')).not.toBeNull()
+    expect(latest(states).check.claimed).toBeNull()
+  })
+
+  /**
+   * And once CodeRabbit's own summary does arrive, the shortfall it names is
+   * still what the warning reports. Ungating the press did not make the count
+   * check redundant; it made it reachable on a page that was hiding it.
+   */
+  it('loads the chunk holding the summary, and then reports its shortfall', async () => {
+    const d = doc(threadMarkup(1))
+    paginationControl(d, noteMarkup(4))
+
+    const states = engineOn(d)
+    expect(latest(states).check.claimed).toBeNull()
+
+    await settle()
+
+    expect(latest(states).check.claimed).toBe(4)
+    expect(latest(states).check.missing).toBe(3)
   })
 })
 
