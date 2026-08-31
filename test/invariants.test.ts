@@ -62,6 +62,9 @@ const HIDES = {
   'pending-in-batch': { safe: 7, aggressive: 7 },
   'no-coderabbit': { safe: 0, aggressive: 0 },
   'resolvable': { safe: 9, aggressive: 9 },
+  // Nothing is hidden on a page GitHub has barely rendered: its one thread is
+  // collapsed, so no mode can attribute it and both leave it alone.
+  'partial-timeline': { safe: 0, aggressive: 0 },
 } as const
 
 const BLOCKING = ['no-id', 'unknown-author', 'no-body']

@@ -40,6 +40,17 @@ A Manifest V3 extension for Chrome and Firefox, panel in Preact, everything read
 * **Resolve and unresolve click GitHub's own buttons.** A row stays under Open until a pass confirms the change on the page. GitHub renders that button for write access, so a row on a repository you cannot write to says so.
 * **The panel mounts only where there is something of CodeRabbit's.** Everywhere else costs one scan per page: no shadow host, no stylesheet, no handle.
 
+## Privacy
+
+The extension reads the review comments on the page you have open, in your own
+browser, and that reading never leaves it. Nothing is transmitted to anyone and
+nothing about any pull request is written down: no comment, thread, repository
+or username. Six preferences and an on/off switch live in
+`chrome.storage.local`, and that is the whole of what is stored. The only
+request the extension makes is to GitHub's own deferred thread endpoint, on your
+own session, for the page you already have open. See
+[`PRIVACY.md`](PRIVACY.md).
+
 ## Development
 
 ```
@@ -59,3 +70,6 @@ Both directories are written from one `src/manifest.ts`, and the JavaScript in t
 ## License
 
 MIT, see `LICENSE.md`.
+
+RabbitHole is an independent project. It is not affiliated with, endorsed by, or
+sponsored by CodeRabbit.

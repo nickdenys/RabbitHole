@@ -23,6 +23,7 @@ describe('manifest', () => {
       version: pkg.version,
       description: 'Turns CodeRabbit review comments into a triage worklist on GitHub pull requests.',
       permissions: ['storage', 'contextMenus'],
+      homepage_url: 'https://github.com/nickdenys/RabbitHole',
       content_scripts: [
         {
           matches: ['https://github.com/*'],
@@ -34,12 +35,12 @@ describe('manifest', () => {
   })
 
   /**
-   * The whole point of generating them. Everything outside `background` and
-   * `browser_specific_settings` has to be identical, so the icons, the
-   * permissions, the matches and the description cannot drift apart.
+   * The whole point of generating them. Everything outside the three keys each
+   * store owns has to be identical, so the icons, the permissions, the matches,
+   * the homepage and the description cannot drift apart.
    */
-  it('differs between the two targets only in how the background script is declared', () => {
-    const differs = ['background', 'browser_specific_settings']
+  it('differs between the two targets only where each store demands its own key', () => {
+    const differs = ['background', 'browser_specific_settings', 'minimum_chrome_version']
 
     const chrome = rest(manifest('chrome'), differs)
     const firefox = rest(manifest('firefox'), differs)
@@ -96,9 +97,26 @@ describe('manifest', () => {
     expect(gecko.data_collection_permissions).toEqual({ required: ['none'] })
   })
 
+  /**
+   * The Chrome half of the same claim, in Chrome's own key. Asserted as a
+   * number above 123 rather than as the literal string, because what it has to
+   * clear is `light-dark()` in `panel.css` and not a value somebody typed.
+   */
+  it('pins a Chrome minimum above the panel CSS it needs', () => {
+    const min = manifest('chrome').minimum_chrome_version
+
+    expect(typeof min).toBe('string')
+    expect(Number.parseInt(min as string, 10)).toBeGreaterThanOrEqual(123)
+  })
+
   /** Chrome warns on manifest keys it does not know, so Firefox's stay out of it. */
   it('keeps Firefox settings out of the Chrome manifest', () => {
     expect(manifest('chrome')).not.toHaveProperty('browser_specific_settings')
+  })
+
+  /** And the reverse: `minimum_chrome_version` is a key `web-ext lint` flags. */
+  it('keeps the Chrome minimum out of the Firefox manifest', () => {
+    expect(manifest('firefox')).not.toHaveProperty('minimum_chrome_version')
   })
 
   it('recognises exactly the two targets the build knows how to write', () => {

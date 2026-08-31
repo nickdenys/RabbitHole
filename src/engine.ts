@@ -7,6 +7,7 @@ import { applyHiding, revealAll } from './hide/apply'
 import { hideVerdict, type HideVerdict } from './hide/policy'
 import { clickLoadMore } from './loadmore'
 import { forgetSessionFindings } from './panel/actions'
+import { hasCodeRabbit } from './panel/rows'
 import { readFinding } from './parse/finding'
 import { scanNotes, type CodeRabbitNote } from './parse/notes'
 import { scanThreads } from './parse/thread'
@@ -432,11 +433,26 @@ function runPass(
   // Click GitHub's own "Load more" for the reader, never ours to fetch. The
   // click is itself a DOM mutation, so it needs no scheduling of its own: it
   // reaches the observer already watching this document and comes back around
-  // as the next pass, which checks `missing` again against whatever GitHub
-  // just rendered. A page with nothing missing, or nothing left to click,
-  // leaves this a no-op every time it runs: `check.more` is the second of
-  // those, already read by the check itself.
-  if (prefs.autoLoadMore && check.missing > 0 && check.more) clickLoadMore(doc)
+  // as the next pass, which reads the page again against whatever GitHub just
+  // rendered. A page with nothing left to click leaves this a no-op every time
+  // it runs: `check.more` is already read by the check itself.
+  //
+  // **Not gated on `check.missing` any more, which was a deadlock.** Until 31
+  // August this ran only when CodeRabbit's total exceeded what the page held,
+  // and that total is itself a comment in the timeline. On a long enough pull
+  // request GitHub withholds the chunk carrying every
+  // `Actionable comments posted: N`, so `claimed` is null, `missing` is 0, and
+  // the one thing that would have loaded the chunk was waiting on a number
+  // inside it. Found on leynos/cuprum#234, which opened claiming nothing and
+  // listing nothing on a review of roughly 102 findings.
+  //
+  // The trigger is the timeline being incomplete on a page CodeRabbit has
+  // touched, which is what the reader wants pressed anyway. `hasCodeRabbit`
+  // rather than an unconditional press, so a pull request CodeRabbit never
+  // reviewed is never paginated by an extension that has nothing to do there:
+  // invariant 4 is about not touching such a page at all, and clicking its
+  // "Load more" would be touching it.
+  if (prefs.autoLoadMore && check.more && hasCodeRabbit({ notes, rows })) clickLoadMore(doc)
 
   return {
     kind,

@@ -523,7 +523,7 @@ function fold(
 }
 
 /**
- * The three states that are not a list, spelled out rather than shared, because
+ * The four states that are not a list, spelled out rather than shared, because
  * the whole point of invariant 3 is that they do not read alike.
  */
 function Empty({ kind }: { kind: EmptyState }) {
@@ -534,6 +534,25 @@ function Empty({ kind }: { kind: EmptyState }) {
         <p>
           GitHub is serving a pull request layout this extension does not know. Nothing was hidden
           and nothing is listed, which is not the same as finding nothing.
+        </p>
+      </div>
+    )
+  }
+
+  /**
+   * Deliberately not a variant of "could not be read". That one is about a
+   * layout this extension does not know; this one is a layout it knows
+   * perfectly well, showing a page GitHub has not finished handing over. The
+   * reader can act on this one, which is why it names the button.
+   */
+  if (kind === 'incomplete') {
+    return (
+      <div class="empty">
+        <p class="empty-title">This page is not fully loaded</p>
+        <p>
+          GitHub is still holding part of this timeline back, so there is nothing to list yet and
+          no way to say there is nothing to find. Press GitHub's own "Load more" in the timeline,
+          or turn on loading it automatically in settings.
         </p>
       </div>
     )

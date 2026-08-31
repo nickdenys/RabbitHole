@@ -3,7 +3,7 @@ import { SORT_LABELS, type SortAxis } from './panel/sort'
 import { THEME_LABELS, type Theme } from './panel/theme'
 
 /**
- * Everything the extension remembers between visits, which is five choices and
+ * Everything the extension remembers between visits, which is six choices and
  * nothing about any pull request.
  *
  * No finding, no thread id and no page is ever written to storage. What a
@@ -71,7 +71,7 @@ const KEY = 'prefs'
  * Held rather than re-read, because a save is a click and a read is a round
  * trip to the extension process: merging against a fresh read is the same race
  * as merging against this one, with a slower loser. Two tabs writing different
- * preferences at once is last writer wins, which for five settings is what a
+ * preferences at once is last writer wins, which for six settings is what a
  * reader would expect anyway.
  */
 let current: Prefs = DEFAULT_PREFS

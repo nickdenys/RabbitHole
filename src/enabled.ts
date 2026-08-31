@@ -37,7 +37,7 @@ export async function loadEnabled(): Promise<boolean> {
  * elsewhere, which in practice is only ever the background service worker's
  * toolbar checkbox.
  *
- * Scoped to this one key in the `local` area, so a change to any of the five
+ * Scoped to this one key in the `local` area, so a change to any of the six
  * `Prefs` fields, written under a different key entirely, never reaches here.
  * A change this tab wrote itself also fires `chrome.storage.onChanged`, and
  * that is fine: `bootstrap.ts`'s `apply` is idempotent, so hearing about your
